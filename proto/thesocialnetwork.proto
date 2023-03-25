@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package thesocialnetwork;
+
+service SocialNetwork {
+  rpc AddFriend (FriendRequest) returns (FriendResponse);
+  rpc RemoveFriend (FriendRequest) returns (FriendResponse);
+  rpc PostMessage (PostMessageRequest) returns (MessageResponse);
+  rpc Timeline (TimelineRequest) returns (stream TimelineResponse);
+  rpc RealTimeNotifications (NotificationsRequest) returns (stream NotificationsResponse);
+}
+
+message FriendRequest {
+  string user_id = 1;
+  string friend_id = 2;
+}
+
+message FriendResponse {
+  bool success = 1;
+}
+
+message Message {
+  string user_id = 1;
+  string content = 2;
+  int64 timestamp = 3;
+}
+
+message PostMessageRequest {
+  string user_id = 1;
+  string content = 2;
+}
+
+message MessageResponse {
+  bool success = 1;
+}
+
+message TimelineRequest {
+  string user_id = 1;
+}
+
+message TimelineResponse {
+  repeated Message messages = 1;
+}
+
+message NotificationsRequest {
+  string user_id = 1;
+}
+
+message NotificationsResponse {
+  Message message = 1;
+}

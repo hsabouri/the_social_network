@@ -1,0 +1,23 @@
+[package]
+name = "the_social_network"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "server"
+path = "src/server/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client/client.rs"
+
+[dependencies]
+tonic = "0.8"
+prost = "0.11"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+futures = "0.3.25"
+promptly = "0.3.1"
+anyhow = "1.0.70"
+
+[build-dependencies]
+tonic-build = "0.8"
