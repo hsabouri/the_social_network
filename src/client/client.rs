@@ -1,6 +1,5 @@
 use anyhow::Error;
 use futures::future;
-use promptly::prompt;
 
 mod cli;
 mod connector;
@@ -12,7 +11,9 @@ use tsn::social_network_client::SocialNetworkClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let user_id: String = prompt("What is your user_id ?")?;
+    let user_id: String = asking::text()
+        .message("What is you user id ?\n")
+        .ask_and_wait()?;
     let client = SocialNetworkClient::connect("http://[::1]:50051")
         .await?
         .auth(user_id)?;

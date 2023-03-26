@@ -22,7 +22,7 @@ message FriendResponse {
 message Message {
   string user_id = 1;
   string content = 2;
-  int64 timestamp = 3;
+  uint64 timestamp = 3;
 }
 
 message PostMessageRequest {

@@ -21,7 +21,7 @@ impl Connector<SocialNetworkClient<Channel>> {
             user_id: self.user_id.clone(),
         };
 
-        let stream = self
+        let mut stream = self
             ._inner
             .clone()
             .real_time_notifications(request)
@@ -30,18 +30,18 @@ impl Connector<SocialNetworkClient<Channel>> {
 
         println!("✅ Subscribed to real-time notifications");
 
-        let stream = stream
-            .map(|response| async {
-                response.ok().and_then(|r| r.message).map(|message| {
-                    println!(
-                        "user {} posted a message:\n {}",
-                        message.user_id, message.content
-                    );
-                });
-            })
-            .fold(Ok(()), |_, _| async { Ok(()) });
+        while let Some(notification) = stream.next().await {
+            notification?.message.map(|message| {
+                println!(
+                    "{} a posté un nouveau message : {}",
+                    message.user_id, message.content
+                );
+            });
+        }
 
-        stream.await
+        println!("Closed notification stream.");
+
+        Ok(())
     }
 
     pub async fn add_friend(self, friend_id: String) -> Result<(), Error> {
@@ -83,7 +83,12 @@ impl Connector<SocialNetworkClient<Channel>> {
             content,
         };
 
-        let response = self._inner.clone().post_message(request).await?.into_inner();
+        let response = self
+            ._inner
+            .clone()
+            .post_message(request)
+            .await?
+            .into_inner();
 
         match response.success {
             true => Ok(()),
@@ -100,13 +105,10 @@ impl Connector<SocialNetworkClient<Channel>> {
 
         let stream = self._inner.clone().timeline(request).await?.into_inner();
 
-        let stream = stream
-            .map(|response| match response {
-                Ok(response) => Ok(response.messages),
-                Err(e) => Err(Error::msg(
-                    format!("error {e}"),
-                )),
-            });
+        let stream = stream.map(|response| match response {
+            Ok(response) => Ok(response.messages),
+            Err(e) => Err(Error::msg(format!("error {e}"))),
+        });
 
         Ok(stream)
     }

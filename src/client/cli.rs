@@ -1,7 +1,6 @@
 use super::Connector;
 use anyhow::Error;
 use futures::{FutureExt, StreamExt};
-use promptly::prompt;
 use std::str::FromStr;
 
 enum Action {
@@ -43,16 +42,22 @@ pub struct Cli {
 
 impl Cli {
     async fn post(&self) -> Result<(), Error> {
-        let content: String = prompt("Write your post (enter to commit):")?;
+        let content: String = asking::text()
+            .message("Write your post (enter to commit)\n")
+            .ask()
+            .await?;
 
-        self.client.clone().post_message(content)
+        self.client
+            .clone()
+            .post_message(content)
             .then(|res| async {
                 match res.as_ref() {
                     Ok(_) => println!("✅ Successfully posted message"),
                     Err(e) => println!("❌ Error: {e}"),
                 };
                 res
-            }).await
+            })
+            .await
     }
 
     async fn timeline(&self) -> Result<(), Error> {
@@ -69,21 +74,21 @@ impl Cli {
                         println!("Post from {}: ({})", post.user_id, post.timestamp);
                         println!("{}", post.content);
                     }
-                },
+                }
                 Some(Err(e)) => {
                     println!("❌ Error: {e}");
-                    break
+                    break;
                 }
                 None => {
                     println!("😭 No posts to see 😭 Try again later 😭");
-                    break
+                    break;
                 }
             }
 
-            let action: bool = prompt("Continue timeline ?")?;
+            let action: bool = asking::yn().message("Continue timeline ?\n").ask().await?;
 
             if !action {
-                break
+                break;
             }
         }
         Ok(())
@@ -121,10 +126,12 @@ impl Cli {
 
     pub async fn interactivity_loop_inner(&self) -> Result<(), Error> {
         loop {
-            let action: Result<Action, Error> = prompt::<String, &str>(
-                "What do you want to do ? (timeline/post/add_friend/rm_friend/close)",
-            )?
-            .parse();
+            let action: Result<Action, Error> = asking::text()
+                .message("What do you want to do ? (timeline/post/add_friend/rm_friend/close)\n")
+                .ask()
+                .await?
+                .parse();
+
             let action = match action {
                 Ok(action) => action,
                 Err(e) => {
