@@ -3,7 +3,6 @@ use futures::future;
 
 mod cli;
 mod connector;
-mod tsn;
 
 use cli::Cli;
 use connector::*;

@@ -1,5 +1,5 @@
 [package]
-name = "the_social_network"
+name = "tsn"
 version = "0.1.0"
 edition = "2021"
 

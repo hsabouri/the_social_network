@@ -3,8 +3,8 @@ use futures::stream::StreamExt;
 use futures::{FutureExt, Stream, TryStreamExt};
 use tonic::transport::Channel;
 
-use super::tsn::social_network_client::SocialNetworkClient;
-use super::tsn::{
+use tsn::social_network_client::SocialNetworkClient;
+use tsn::{
     FriendRequest, Message, NotificationsRequest, PostMessageRequest, TimelineRequest,
 };
 

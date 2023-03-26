@@ -9,7 +9,6 @@ use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{transport::Server, Request, Response, Status};
 
-mod tsn;
 use tsn::social_network_server::{SocialNetwork, SocialNetworkServer};
 use tsn::{
     FriendRequest, FriendResponse, Message, MessageResponse, NotificationsRequest,
