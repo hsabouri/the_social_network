@@ -1,0 +1,14 @@
+{
+    "listening_addr": "127.0.0.1:50051",
+    "scylladb": {
+        "hostnames": ["127.0.0.1:9042"]
+    },
+    "postgresql": {
+        "host": "127.0.0.1",
+        "port": "5432",
+        "username": "user",
+        "password": "password",
+        "database": "my_social_network_db",
+        "ssl_strategy": "prefer"
+    }
+}

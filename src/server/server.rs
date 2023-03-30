@@ -1,4 +1,5 @@
 use anyhow::Error;
+use config::ServerConfig;
 use dashmap::DashMap;
 use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt};
 use std::pin::Pin;
@@ -19,12 +20,14 @@ use tsn::{
 #[derive(Clone)]
 struct ServerState {
     notifications: Arc<DashMap<String, broadcast::Sender<Message>>>,
+    config: ServerConfig,
 }
 
 impl ServerState {
-    pub fn new() -> Self {
+    pub fn new(config: ServerConfig) -> Self {
         Self {
             notifications: Arc::new(DashMap::new()),
+            config,
         }
     }
 
@@ -192,12 +195,13 @@ impl SocialNetwork for ServerState {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse()?;
-    let server_state = ServerState::new();
+    let config = config::ServerConfig::load_from_file("./config/config.dev.json")?;
+
+    let server_state = ServerState::new(config.clone());
 
     Server::builder()
         .add_service(SocialNetworkServer::new(server_state))
-        .serve(addr)
+        .serve(config.listening_addr)
         .await?;
 
     Ok(())
