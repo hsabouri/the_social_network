@@ -5,11 +5,11 @@ edition = "2021"
 
 [[bin]]
 name = "server"
-path = "src/server/server.rs"
+path = "src/server/main.rs"
 
 [[bin]]
 name = "client"
-path = "src/client/client.rs"
+path = "crat/client/client.rs"
 
 [dependencies]
 # Main frameworks
@@ -32,9 +32,11 @@ dashmap = "5.4.0"
 # Project crates
 config = { path = "./crates/config" }
 proto = { path = "./crates/proto" }
+models = { path = "./crates/models" }
 
 [workspace]
 members = [
     "crates/config",
     "crates/proto",
+    "crates/models",
 ]
