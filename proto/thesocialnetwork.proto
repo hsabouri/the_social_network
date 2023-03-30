@@ -5,8 +5,10 @@ package thesocialnetwork;
 service SocialNetwork {
   rpc AddFriend (FriendRequest) returns (FriendResponse);
   rpc RemoveFriend (FriendRequest) returns (FriendResponse);
-  rpc PostMessage (PostMessageRequest) returns (MessageResponse);
+  rpc PostMessage (PostMessageRequest) returns (MessageStatusResponse);
   rpc Timeline (TimelineRequest) returns (stream TimelineResponse);
+  rpc TagReadMessage (MessageRequest) returns (MessageStatusResponse);
+  rpc TagUnreadMessage (MessageRequest) returns (MessageStatusResponse);
   rpc RealTimeNotifications (NotificationsRequest) returns (stream NotificationsResponse);
 }
 
@@ -19,10 +21,16 @@ message FriendResponse {
   bool success = 1;
 }
 
+message MessageRequest {
+  string message_id = 1;
+}
+
 message Message {
   string user_id = 1;
-  string content = 2;
+  string message_id = 2;
   uint64 timestamp = 3;
+  string content = 4;
+  bool read = 5;
 }
 
 message PostMessageRequest {
@@ -30,7 +38,7 @@ message PostMessageRequest {
   string content = 2;
 }
 
-message MessageResponse {
+message MessageStatusResponse {
   bool success = 1;
 }
 

@@ -11,8 +11,9 @@ use tonic::{transport::Server, Request, Response, Status};
 
 use tsn::social_network_server::{SocialNetwork, SocialNetworkServer};
 use tsn::{
-    FriendRequest, FriendResponse, Message, MessageResponse, NotificationsRequest,
-    NotificationsResponse, PostMessageRequest, TimelineRequest, TimelineResponse,
+    FriendRequest, FriendResponse, Message, MessageRequest, MessageStatusResponse,
+    NotificationsRequest, NotificationsResponse, PostMessageRequest, TimelineRequest,
+    TimelineResponse,
 };
 
 #[derive(Clone)]
@@ -61,10 +62,24 @@ impl SocialNetwork for ServerState {
         todo!()
     }
 
+    async fn tag_read_message(
+        &self,
+        request: Request<MessageRequest>,
+    ) -> Result<Response<MessageStatusResponse>, Status> {
+        todo!()
+    }
+
+    async fn tag_unread_message(
+        &self,
+        request: Request<MessageRequest>,
+    ) -> Result<Response<MessageStatusResponse>, Status> {
+        todo!()
+    }
+
     async fn post_message(
         &self,
         request: Request<PostMessageRequest>,
-    ) -> Result<Response<MessageResponse>, Status> {
+    ) -> Result<Response<MessageStatusResponse>, Status> {
         let message = request.into_inner();
         let preview = message
             .content
@@ -81,6 +96,8 @@ impl SocialNetwork for ServerState {
         let message = Message {
             user_id: message.user_id,
             content: message.content,
+            message_id: "FIXME".to_string(),
+            read: false,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -95,7 +112,7 @@ impl SocialNetwork for ServerState {
             _ => (),
         };
 
-        let response = MessageResponse { success: true };
+        let response = MessageStatusResponse { success: true };
 
         Ok(Response::new(response))
     }
@@ -112,16 +129,22 @@ impl SocialNetwork for ServerState {
             Message {
                 user_id: "user1".to_string(),
                 content: "Ceci est un message d'exemple 1.".to_string(),
+                message_id: "1".to_string(),
+                read: false,
                 timestamp: 1,
             },
             Message {
                 user_id: "user2".to_string(),
                 content: "Ceci est un message d'exemple 2.".to_string(),
+                message_id: "2".to_string(),
+                read: false,
                 timestamp: 2,
             },
             Message {
                 user_id: "user3".to_string(),
                 content: "Ceci est un message d'exemple 3.".to_string(),
+                message_id: "3".to_string(),
+                read: false,
                 timestamp: 3,
             },
         ];
