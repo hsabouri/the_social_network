@@ -31,12 +31,10 @@ dashmap = "5.4.0"
 
 # Project crates
 config = { path = "./crates/config" }
-
-[build-dependencies]
-tonic-build = "0.8"
-
+proto = { path = "./crates/proto" }
 
 [workspace]
 members = [
     "crates/config",
+    "crates/proto",
 ]

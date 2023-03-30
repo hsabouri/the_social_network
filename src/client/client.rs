@@ -6,7 +6,7 @@ mod connector;
 
 use cli::Cli;
 use connector::*;
-use tsn::social_network_client::SocialNetworkClient;
+use proto::social_network_client::SocialNetworkClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

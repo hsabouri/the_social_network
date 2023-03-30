@@ -3,10 +3,8 @@ use futures::stream::StreamExt;
 use futures::{FutureExt, Stream, TryStreamExt};
 use tonic::transport::Channel;
 
-use tsn::social_network_client::SocialNetworkClient;
-use tsn::{
-    FriendRequest, Message, NotificationsRequest, PostMessageRequest, TimelineRequest,
-};
+use proto::social_network_client::SocialNetworkClient;
+use proto::{FriendRequest, Message, NotificationsRequest, PostMessageRequest, TimelineRequest};
 
 /// Placeholder authentication system. It is used to store the user_id along with the gRPC client.
 #[derive(Clone, Debug)]

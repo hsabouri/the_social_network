@@ -10,8 +10,8 @@ use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{transport::Server, Request, Response, Status};
 
-use tsn::social_network_server::{SocialNetwork, SocialNetworkServer};
-use tsn::{
+use proto::social_network_server::{SocialNetwork, SocialNetworkServer};
+use proto::{
     FriendRequest, FriendResponse, Message, MessageRequest, MessageStatusResponse,
     NotificationsRequest, NotificationsResponse, PostMessageRequest, TimelineRequest,
     TimelineResponse,
@@ -162,7 +162,8 @@ impl SocialNetwork for ServerState {
         Ok(Response::new(Box::pin(stream)))
     }
 
-    type RealTimeNotificationsStream = Pin<Box<dyn Stream<Item = Result<NotificationsResponse, Status>> + Send>>;
+    type RealTimeNotificationsStream =
+        Pin<Box<dyn Stream<Item = Result<NotificationsResponse, Status>> + Send>>;
 
     async fn real_time_notifications(
         &self,
@@ -181,11 +182,11 @@ impl SocialNetwork for ServerState {
             });
 
         let rx = self.notifications.get(&user_id).unwrap().subscribe();
-        let stream = BroadcastStream::new(rx).map_ok(|message| {
-            NotificationsResponse {
+        let stream = BroadcastStream::new(rx)
+            .map_ok(|message| NotificationsResponse {
                 message: Some(message),
-            }
-        }).map_err(|e| Status::internal(format!("error: {e}")));
+            })
+            .map_err(|e| Status::internal(format!("error: {e}")));
 
         println!("User {user_id} connected to live notifications.");
 
