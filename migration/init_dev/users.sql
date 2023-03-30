@@ -1,10 +1,10 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE IF NOT EXISTS users {
-    user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4 ();
+CREATE TABLE IF NOT EXISTS users (
+    user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(16)
-};
+);
 
-INSERT INTO users (user_id, name) VALUES ('a1234567-1234-5678-1234-567812345678', 'Alice');
-INSERT INTO users (user_id, name) VALUES ('b1234567-1234-5678-1234-567812345678', 'Bob');
-INSERT INTO users (user_id, name) VALUES ('c1234567-1234-5678-1234-567812345678', 'Charlie');
+INSERT INTO users (user_id, name) VALUES ('11234567-1234-5678-1234-567812345678', 'Alice');
+INSERT INTO users (user_id, name) VALUES ('21234567-1234-5678-1234-567812345678', 'Bob');
+INSERT INTO users (user_id, name) VALUES ('31234567-1234-5678-1234-567812345678', 'Charlie');
