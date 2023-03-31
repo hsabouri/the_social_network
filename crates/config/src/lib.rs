@@ -65,6 +65,7 @@ impl Into<PgConnectOptions> for PostgreSqlConfig {
             .port(self.port)
             .username(&self.username)
             .password(&self.password)
+            .database(&self.database)
             .ssl_mode(self.ssl_strategy)
     }
 }

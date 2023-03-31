@@ -9,7 +9,7 @@ path = "src/server/main.rs"
 
 [[bin]]
 name = "client"
-path = "crat/client/client.rs"
+path = "src/client/client.rs"
 
 [dependencies]
 # Main frameworks
