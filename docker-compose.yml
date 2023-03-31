@@ -9,6 +9,7 @@ services:
       - "9042:9042"
     volumes:
       - scylladb_data:/var/lib/scylla
+      - ./scylla.yaml:/etc/scylla/scylla.yaml
       - ./migration:/usr/migration
     environment:
       - SCYLLA_CLUSTER_NAME=my_social_network_cluster
