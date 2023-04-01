@@ -20,7 +20,7 @@ where
     pub fn new(name: String) -> Self {
         Self {
             name,
-            _f: PhantomData::<T>::default()
+            _f: PhantomData::<T>::default(),
         }
     }
 
@@ -39,7 +39,7 @@ where
 
         Ok(User {
             id: res.user_id,
-            name: res.name
+            name: res.name,
         })
     }
 }
@@ -58,7 +58,7 @@ where
     pub fn new(uuid: Uuid) -> Self {
         Self {
             uuid,
-            _f: PhantomData::<T>::default()
+            _f: PhantomData::<T>::default(),
         }
     }
 
@@ -86,13 +86,9 @@ pub struct InsertFriendshipRequest {
     pub user_b: Uuid,
 }
 
-impl InsertFriendshipRequest
-{
+impl InsertFriendshipRequest {
     pub fn new(user_a: Uuid, user_b: Uuid) -> Self {
-        Self {
-            user_a,
-            user_b,
-        }
+        Self { user_a, user_b }
     }
 
     pub async fn execute(self, conn: PgPool) -> Result<(), Error> {

@@ -1,9 +1,9 @@
 CREATE TABLE IF NOT EXISTS messages (
-    message_id UUID,
-    user_id UUID,
-    date_bucket TIMESTAMP,
-    date TIMESTAMP,
-    content TEXT,
+    message_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    date_bucket TIMESTAMP NOT NULL,
+    date TIMESTAMP NOT NULL,
+    content TEXT NOT NULL,
     PRIMARY KEY ((user_id, date_bucket), date, message_id)
 ) WITH CLUSTERING ORDER BY (date DESC);
 

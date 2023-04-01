@@ -1,7 +1,10 @@
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::repository::users::{InsertUserRequest, DeleteUserRequest, InsertFriendshipRequest};
+use crate::repository::{
+    messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
+    users::{DeleteUserRequest, InsertFriendshipRequest, InsertUserRequest},
+};
 
 #[derive(Clone, Debug)]
 pub struct User {
@@ -10,7 +13,7 @@ pub struct User {
 }
 
 impl User {
-    pub fn create<'a, T: PgExecutor<'a> + Copy>(name: String) -> InsertUserRequest<T> {
+    pub fn insert<'a, T: PgExecutor<'a> + Copy>(name: String) -> InsertUserRequest<T> {
         InsertUserRequest::new(name)
     }
 
@@ -20,5 +23,13 @@ impl User {
 
     pub fn friend_with(&self, other: &User) -> InsertFriendshipRequest {
         InsertFriendshipRequest::new(self.id, other.id)
+    }
+
+    pub fn insert_message(&self, content: String) -> InsertMessageRequest {
+        InsertMessageRequest::new(self.id, content)
+    }
+
+    pub fn get_messages(&self) -> GetLastMessagesOfUserRequest {
+        GetLastMessagesOfUserRequest::new(self.id)
     }
 }

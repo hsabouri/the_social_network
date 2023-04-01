@@ -1,4 +1,4 @@
-use std::{ops::Deref, path::Path, str::FromStr, sync::Arc, fs::File, net::SocketAddr};
+use std::{fs::File, net::SocketAddr, ops::Deref, path::Path, str::FromStr, sync::Arc};
 
 use serde::{de, ser, Deserialize, Serialize};
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
