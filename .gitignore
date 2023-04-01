@@ -1,3 +1,5 @@
 /target
 /.cargo
 *bnp*
+/scylladb_data
+/postgres_data

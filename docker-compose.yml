@@ -8,7 +8,7 @@ services:
     ports:
       - "9042:9042"
     volumes:
-      - scylladb_data:/var/lib/scylla
+      - ./scylladb_data:/var/lib/scylla
       - ./scylla.yaml:/etc/scylla/scylla.yaml
       - ./migration:/usr/migration
     environment:
@@ -21,13 +21,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./postgres_data:/var/lib/postgresql/data
       - ./migration:/usr/migration
     environment:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=my_social_network_db
-
-volumes:
-  scylladb_data:
-  postgres_data:
