@@ -1,7 +1,7 @@
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-use crate::repository::messages::InsertMessageRequest;
+use crate::repository::messages::{InsertMessageRequest, SeenMessageRequest};
 
 #[derive(Clone, Debug)]
 pub struct Message {
@@ -14,5 +14,9 @@ pub struct Message {
 impl Message {
     pub fn insert(user_id: Uuid, content: String) -> InsertMessageRequest {
         InsertMessageRequest::new(user_id, content)
+    }
+
+    pub fn seen_by(&self, user_id: Uuid) -> SeenMessageRequest {
+        SeenMessageRequest::new(self.id, user_id)
     }
 }

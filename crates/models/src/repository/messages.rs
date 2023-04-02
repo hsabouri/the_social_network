@@ -141,3 +141,30 @@ impl GetLastMessagesOfUserRequest {
         s
     }
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct SeenMessageRequest {
+    pub user_id: Uuid,
+    pub message_id: Uuid,
+}
+
+impl SeenMessageRequest {
+    pub fn new(message_id: Uuid, user_id: Uuid) -> Self {
+        Self {
+            user_id,
+            message_id,
+        }
+    }
+
+    pub async fn execute(self, session: &Session) -> Result<(), Error> {
+        let _ = session
+            .query(
+                r#"INSERT INTO read_tags (user_id, message_id)
+                VALUES (?, ?)"#,
+                (self.user_id, self.message_id),
+            )
+            .await?;
+
+        Ok(())
+    }
+}

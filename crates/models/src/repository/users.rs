@@ -1,10 +1,48 @@
 use std::marker::PhantomData;
 
 use anyhow::Error;
+use futures::{
+    stream::StreamExt,
+    Stream,
+};
 use sqlx::{postgres::PgExecutor, PgPool};
 use uuid::Uuid;
 
-use crate::users::User;
+use crate::users::{User, UserRef};
+
+pub struct GetUser<T> {
+    pub user_id: Uuid,
+    _f: PhantomData<T>,
+}
+
+impl<'a, T> GetUser<T>
+where
+    T: PgExecutor<'a> + Copy,
+{
+    pub fn new(user_id: Uuid) -> Self {
+        Self {
+            user_id,
+            _f: PhantomData::default(),
+        }
+    }
+
+    pub async fn get(self, conn: T) -> Result<User, Error> {
+        let res = sqlx::query!(
+            // language=PostgreSQL
+            r#"
+                SELECT name FROM users WHERE user_id = $1
+            "#,
+            self.user_id,
+        )
+        .fetch_one(conn)
+        .await?;
+
+        Ok(User {
+            id: self.user_id,
+            name: res.name,
+        })
+    }
+}
 
 /// Insert a user in database
 #[derive(Clone)]
@@ -121,5 +159,38 @@ impl InsertFriendshipRequest {
         t.commit().await?;
 
         Ok(())
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct GetFriendsOfUserRequest<T> {
+    pub user_id: Uuid,
+    _t: PhantomData<T>,
+}
+
+impl<'a, T> GetFriendsOfUserRequest<T>
+where
+    T: PgExecutor<'a> + Copy,
+{
+    pub fn new(user_id: Uuid) -> Self {
+        Self {
+            user_id,
+            _t: PhantomData::default(),
+        }
+    }
+
+    pub fn stream(self, conn: T) -> impl Stream<Item = Result<UserRef, Error>> + 'a
+    where
+        T: 'a,
+    {
+        sqlx::query!(
+            // language=PostgreSQL
+            r#"
+                SELECT user_id FROM friendships WHERE user_id = $1
+            "#,
+            self.user_id,
+        )
+        .fetch(conn)
+        .map(|record| Ok(record.map(|record| UserRef(record.user_id))?))
     }
 }
