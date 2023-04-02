@@ -20,3 +20,15 @@ impl Message {
         SeenMessageRequest::new(self.id, user_id)
     }
 }
+
+impl PartialEq for Message {
+    fn eq(&self, other: &Self) -> bool {
+        self.date == other.date
+    }
+}
+
+impl PartialOrd for Message {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.date.partial_cmp(&other.date)
+    }
+}

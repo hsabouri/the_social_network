@@ -1,10 +1,7 @@
 use std::marker::PhantomData;
 
 use anyhow::Error;
-use futures::{
-    stream::StreamExt,
-    Stream,
-};
+use futures::{stream::StreamExt, Stream};
 use sqlx::{postgres::PgExecutor, PgPool};
 use uuid::Uuid;
 

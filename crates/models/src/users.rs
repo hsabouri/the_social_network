@@ -1,17 +1,23 @@
 use anyhow::Error;
-use futures::stream::{StreamExt, BoxStream};
+use async_trait::async_trait;
+use futures::stream::{BoxStream, StreamExt};
+use scylla::Session;
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::{repository::{
-    messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
-    users::{
-        DeleteUserRequest, GetFriendsOfUserRequest, GetUser, InsertFriendshipRequest,
-        InsertUserRequest,
+use crate::{
+    messages::Message,
+    repository::{
+        messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
+        users::{
+            DeleteUserRequest, GetFriendsOfUserRequest, GetUser, InsertFriendshipRequest,
+            InsertUserRequest,
+        },
     },
-}, messages::Message};
+};
 
 /// Contains all functions that only requires the Uuid of the User.
+#[async_trait]
 pub trait Userlike {
     fn get_uuid(&self) -> Uuid;
 
@@ -39,8 +45,26 @@ pub trait Userlike {
         InsertUserRequest::new(name)
     }
 
-    fn get_timeline<'a, T: 'a + PgExecutor<'a> + Copy>(&self, conn: T) -> BoxStream<'a, Result<Message, Error>> {
-        let friends = self.get_friends().stream(conn);
+    async fn get_timeline<'a, T: 'a + PgExecutor<'a> + Copy>(
+        &self,
+        conn: T,
+        session: &Session,
+    ) -> Result<BoxStream<'a, Result<Message, Error>>, Error> {
+        let friends = self
+            .get_friends()
+            .stream(conn)
+            .collect::<Vec<Result<UserRef, Error>>>()
+            .await;
+        let friends_msg_streams = friends
+            .into_iter()
+            .map(|friend| match friend {
+                Ok(friend) => Ok(friend.get_messages().stream(session)),
+                Err(e) => Err(e),
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        // Because message streams are sorted due to how they are stored in Scylla
+        // At any time, between all our streams, we are sure there is the next most recent message to be put in timeline
 
         todo!()
     }
