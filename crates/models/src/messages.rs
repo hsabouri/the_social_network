@@ -27,8 +27,16 @@ impl PartialEq for Message {
     }
 }
 
+impl Eq for Message { }
+
 impl PartialOrd for Message {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.date.partial_cmp(&other.date)
+    }
+}
+
+impl Ord for Message {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }

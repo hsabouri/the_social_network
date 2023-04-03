@@ -5,6 +5,8 @@ use scylla::Session;
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
+use stream_helpers::MergeSortedTryStreams;
+
 use crate::{
     messages::Message,
     repository::{
@@ -48,25 +50,21 @@ pub trait Userlike {
     async fn get_timeline<'a, T: 'a + PgExecutor<'a> + Copy>(
         &self,
         conn: T,
-        session: &Session,
+        session: &'a Session,
     ) -> Result<BoxStream<'a, Result<Message, Error>>, Error> {
         let friends = self
             .get_friends()
             .stream(conn)
             .collect::<Vec<Result<UserRef, Error>>>()
             .await;
-        let friends_msg_streams = friends
+
+        let friends_streams: Vec<_> = friends
             .into_iter()
-            .map(|friend| match friend {
-                Ok(friend) => Ok(friend.get_messages().stream(session)),
-                Err(e) => Err(e),
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
+            .filter_map(|f| f.ok())
+            .map(|f| Box::pin(f.get_messages().stream(session)))
+            .collect();
 
-        // Because message streams are sorted due to how they are stored in Scylla
-        // At any time, between all our streams, we are sure there is the next most recent message to be put in timeline
-
-        todo!()
+        Ok(Box::pin(MergeSortedTryStreams::new(friends_streams)))
     }
 }
 

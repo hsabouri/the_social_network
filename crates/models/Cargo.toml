@@ -14,3 +14,5 @@ async-trait = "0.1.68"
 
 scylla = "0.8.0"
 sqlx = { version = "0.6.3", features = [ "runtime-tokio-native-tls", "postgres", "uuid" ] }
+
+stream_helpers = { path = "../stream_helpers" }

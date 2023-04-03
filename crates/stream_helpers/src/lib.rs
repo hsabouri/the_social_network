@@ -54,7 +54,10 @@ where
 {
     pub fn new(streams: Vec<T>) -> Self {
         Self {
-            streams: streams.into_iter().map(|stream| (stream, StreamState::Waiting)).collect()
+            streams: streams
+                .into_iter()
+                .map(|stream| (stream, StreamState::Waiting))
+                .collect(),
         }
     }
 }
@@ -101,11 +104,7 @@ where
                     StreamState::Waiting => false,
                     StreamState::Yielded(_) => true,
                 })
-                .min_by(|(_, v1), (_, v2)| {
-                    v1.as_ref()
-                        .unwrap()
-                        .cmp(v2.as_ref().unwrap())
-                });
+                .min_by(|(_, v1), (_, v2)| v1.as_ref().unwrap().cmp(v2.as_ref().unwrap()));
 
             match value {
                 Some((_, v)) => {
@@ -134,6 +133,21 @@ where
     E: Ord,
 {
     streams: Vec<(T, StreamState<Result<E, O>>)>,
+}
+
+impl<T, E, O> MergeSortedTryStreams<T, E, O>
+where
+    T: Stream<Item = Result<E, O>>,
+    E: Ord,
+{
+    pub fn new(streams: Vec<T>) -> Self {
+        Self {
+            streams: streams
+                .into_iter()
+                .map(|stream| (stream, StreamState::Waiting))
+                .collect(),
+        }
+    }
 }
 
 impl<T, E, O> Unpin for MergeSortedTryStreams<T, E, O>
@@ -178,14 +192,14 @@ where
                     StreamState::Waiting => false,
                     StreamState::Yielded(_) => true,
                 })
-                .min_by(|(_, v1), (_, v2)| {
-                    match (v1.as_ref().unwrap(), v2.as_ref().unwrap()) {
+                .min_by(
+                    |(_, v1), (_, v2)| match (v1.as_ref().unwrap(), v2.as_ref().unwrap()) {
                         (Ok(v1), Ok(v2)) => v1.cmp(v2),
                         (Ok(_), Err(_)) => Ordering::Less,
                         (Err(_), Ok(_)) => Ordering::Greater,
                         (Err(_), Err(_)) => Ordering::Equal,
-                    }
-                });
+                    },
+                );
 
             match value {
                 Some((_, v)) => {
@@ -228,13 +242,23 @@ async fn test_merge_sorted_streams() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_merge_sorted_trystreams_simple() -> Result<(), Box<dyn std::error::Error>> {
     use futures::stream;
 
-    let a = stream::iter(&[Ok(7), Ok(8), Ok(14), Ok(16)]);
-    let b = stream::iter(&[Ok(9)]);
-    let c = stream::iter(&[Ok(7), Ok(8)]);
-    let d = stream::iter(&[Ok(1), Ok(12)]);
-    let expected = vec![Ok(1), Ok(7), Ok(7), Ok(8), Ok(8), Ok(9), Ok(12), Ok(14), Ok(16)];
+    let a = stream::iter(vec![Ok(7), Ok(8), Ok(14), Ok(16)]);
+    let b = stream::iter(vec![Ok(9)]);
+    let c = stream::iter(vec![Ok(7), Ok(8)]);
+    let d = stream::iter(vec![Ok(1), Ok(12)]);
+    let expected = vec![
+        Ok(1),
+        Ok(7),
+        Ok(7),
+        Ok(8),
+        Ok(8),
+        Ok(9),
+        Ok(12),
+        Ok(14),
+        Ok(16),
+    ];
 
-    let stream = MergeSortedStreams::new(vec![a, b, c, d]);
+    let stream = MergeSortedTryStreams::new(vec![a, b, c, d]);
 
     let result: Vec<Result<i32, ()>> = stream.collect().await;
 
@@ -248,13 +272,23 @@ async fn test_merge_sorted_trystreams_simple() -> Result<(), Box<dyn std::error:
 async fn test_merge_sorted_trystreams_intermediate() -> Result<(), Box<dyn std::error::Error>> {
     use futures::stream;
 
-    let a = stream::iter(&[Ok(7), Err(()), Ok(14), Ok(16)]);
-    let b = stream::iter(&[Ok(9)]);
-    let c = stream::iter(&[Ok(7), Ok(8)]);
-    let d = stream::iter(&[Ok(1), Ok(12)]);
-    let expected = vec![Ok(1), Ok(7), Ok(7), Ok(8), Ok(9), Ok(12), Err(()), Ok(14), Ok(16)];
+    let a = stream::iter(vec![Ok(7), Err(()), Ok(14), Ok(16)]);
+    let b = stream::iter(vec![Ok(9)]);
+    let c = stream::iter(vec![Ok(7), Ok(8)]);
+    let d = stream::iter(vec![Ok(1), Ok(12)]);
+    let expected = vec![
+        Ok(1),
+        Ok(7),
+        Ok(7),
+        Ok(8),
+        Ok(9),
+        Ok(12),
+        Err(()),
+        Ok(14),
+        Ok(16),
+    ];
 
-    let stream = MergeSortedStreams::new(vec![a, b, c, d]);
+    let stream = MergeSortedTryStreams::new(vec![a, b, c, d]);
 
     let result: Vec<Result<i32, ()>> = stream.collect().await;
 
@@ -269,13 +303,23 @@ async fn test_merge_sorted_trystreams_intermediate() -> Result<(), Box<dyn std::
 async fn test_merge_sorted_trystreams_edge() -> Result<(), Box<dyn std::error::Error>> {
     use futures::stream;
 
-    let a = stream::iter(&[Ok(7), Err(()), Ok(9), Ok(16)]);
-    let b = stream::iter(&[Ok(9)]);
-    let c = stream::iter(&[Ok(7), Ok(8)]);
-    let d = stream::iter(&[Ok(1), Ok(12)]);
-    let expected = vec![Ok(1), Ok(7), Ok(7), Ok(8), Ok(9), Ok(12), Err(()), Ok(9), Ok(16)];
+    let a = stream::iter(vec![Ok(7), Err(()), Ok(9), Ok(16)]);
+    let b = stream::iter(vec![Ok(9)]);
+    let c = stream::iter(vec![Ok(7), Ok(8)]);
+    let d = stream::iter(vec![Ok(1), Ok(12)]);
+    let expected = vec![
+        Ok(1),
+        Ok(7),
+        Ok(7),
+        Ok(8),
+        Ok(9),
+        Ok(12),
+        Err(()),
+        Ok(9),
+        Ok(16),
+    ];
 
-    let stream = MergeSortedStreams::new(vec![a, b, c, d]);
+    let stream = MergeSortedTryStreams::new(vec![a, b, c, d]);
 
     let result: Vec<Result<i32, ()>> = stream.collect().await;
 
