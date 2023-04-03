@@ -39,4 +39,5 @@ members = [
     "crates/config",
     "crates/proto",
     "crates/models",
+    "crates/stream_helpers",
 ]
