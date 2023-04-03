@@ -27,7 +27,7 @@ impl PartialEq for Message {
     }
 }
 
-impl Eq for Message { }
+impl Eq for Message {}
 
 impl PartialOrd for Message {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {

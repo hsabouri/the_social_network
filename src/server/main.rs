@@ -2,6 +2,7 @@ use proto::social_network_server::SocialNetworkServer;
 use tonic::transport::Server;
 
 mod api;
+mod connections;
 
 use api::ServerState;
 
@@ -9,7 +10,7 @@ use api::ServerState;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::ServerConfig::load_from_file("./config/config.dev.json")?;
 
-    let server_state = ServerState::new(config.clone());
+    let server_state = ServerState::new(config.clone()).await?;
 
     Server::builder()
         .add_service(SocialNetworkServer::new(server_state))

@@ -29,19 +29,19 @@ where
 pub type ScyllaHost = String;
 pub type PgHost = String;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScyllaDbConfig {
     pub hostnames: Vec<ScyllaHost>,
 }
 
-impl Into<scylla::SessionBuilder> for ScyllaDbConfig {
-    fn into(self) -> scylla::SessionBuilder {
+impl ScyllaDbConfig {
+    pub fn into_builder(&self) -> scylla::SessionBuilder {
         scylla::SessionBuilder::new().known_nodes(self.hostnames.as_slice())
     }
 }
 
 // FIXME: Find a better way to store user/password
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PostgreSqlConfig {
     pub host: PgHost,
     #[serde(deserialize_with = "deserialize_from_str")]
@@ -58,8 +58,8 @@ pub struct PostgreSqlConfig {
     pub ssl_strategy: PgSslMode,
 }
 
-impl Into<PgConnectOptions> for PostgreSqlConfig {
-    fn into(self) -> PgConnectOptions {
+impl PostgreSqlConfig {
+    pub fn into_options(&self) -> PgConnectOptions {
         PgConnectOptions::new()
             .host(self.host.as_str())
             .port(self.port)

@@ -7,23 +7,16 @@ use uuid::Uuid;
 
 use crate::users::{User, UserRef};
 
-pub struct GetUser<T> {
+pub struct GetUser {
     pub user_id: Uuid,
-    _f: PhantomData<T>,
 }
 
-impl<'a, T> GetUser<T>
-where
-    T: PgExecutor<'a> + Copy,
-{
+impl GetUser {
     pub fn new(user_id: Uuid) -> Self {
-        Self {
-            user_id,
-            _f: PhantomData::default(),
-        }
+        Self { user_id }
     }
 
-    pub async fn get(self, conn: T) -> Result<User, Error> {
+    pub async fn get(self, conn: PgPool) -> Result<User, Error> {
         let res = sqlx::query!(
             // language=PostgreSQL
             r#"
@@ -31,7 +24,7 @@ where
             "#,
             self.user_id,
         )
-        .fetch_one(conn)
+        .fetch_one(&conn)
         .await?;
 
         Ok(User {
@@ -43,23 +36,16 @@ where
 
 /// Insert a user in database
 #[derive(Clone)]
-pub struct InsertUserRequest<T> {
+pub struct InsertUserRequest {
     pub name: String,
-    _f: PhantomData<T>,
 }
 
-impl<'a, T> InsertUserRequest<T>
-where
-    T: PgExecutor<'a> + Copy,
-{
+impl InsertUserRequest {
     pub fn new(name: String) -> Self {
-        Self {
-            name,
-            _f: PhantomData::<T>::default(),
-        }
+        Self { name }
     }
 
-    pub async fn execute(self, conn: T) -> Result<User, Error> {
+    pub async fn execute(self, conn: PgPool) -> Result<User, Error> {
         let res = sqlx::query!(
             // language=PostgreSQL
             r#"
@@ -69,7 +55,7 @@ where
             "#,
             self.name,
         )
-        .fetch_one(conn)
+        .fetch_one(&conn)
         .await?;
 
         Ok(User {
@@ -81,23 +67,16 @@ where
 
 /// Delete a user in database
 #[derive(Copy, Clone)]
-pub struct DeleteUserRequest<T> {
+pub struct DeleteUserRequest {
     pub uuid: Uuid,
-    _f: PhantomData<T>,
 }
 
-impl<'a, T> DeleteUserRequest<T>
-where
-    T: PgExecutor<'a> + Copy,
-{
+impl DeleteUserRequest {
     pub fn new(uuid: Uuid) -> Self {
-        Self {
-            uuid,
-            _f: PhantomData::<T>::default(),
-        }
+        Self { uuid }
     }
 
-    pub async fn execute(self, conn: T) -> Result<(), Error> {
+    pub async fn execute(self, conn: PgPool) -> Result<(), Error> {
         let res = sqlx::query!(
             // language=PostgreSQL
             r#"
@@ -105,7 +84,7 @@ where
             "#,
             self.uuid,
         )
-        .fetch_one(conn)
+        .fetch_one(&conn)
         .await?;
 
         Ok(())
@@ -160,26 +139,16 @@ impl InsertFriendshipRequest {
 }
 
 #[derive(Copy, Clone)]
-pub struct GetFriendsOfUserRequest<T> {
+pub struct GetFriendsOfUserRequest {
     pub user_id: Uuid,
-    _t: PhantomData<T>,
 }
 
-impl<'a, T> GetFriendsOfUserRequest<T>
-where
-    T: PgExecutor<'a> + Copy,
-{
+impl GetFriendsOfUserRequest {
     pub fn new(user_id: Uuid) -> Self {
-        Self {
-            user_id,
-            _t: PhantomData::default(),
-        }
+        Self { user_id }
     }
 
-    pub fn stream(self, conn: T) -> impl Stream<Item = Result<UserRef, Error>> + 'a
-    where
-        T: 'a,
-    {
+    pub fn stream<'a>(self, conn: &'a PgPool) -> impl Stream<Item = Result<UserRef, Error>> + 'a {
         sqlx::query!(
             // language=PostgreSQL
             r#"

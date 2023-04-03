@@ -1,7 +1,10 @@
 use anyhow::Error;
 use config::ServerConfig;
 use dashmap::DashMap;
-use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use models::users::{UserRef, Userlike};
+use scylla::Session;
+use sqlx::PgPool;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,18 +19,22 @@ use proto::{
     TimelineResponse,
 };
 
+use crate::connections::ServerConnections;
+
 #[derive(Clone)]
 pub struct ServerState {
     notifications: Arc<DashMap<String, broadcast::Sender<Message>>>,
+    connections: ServerConnections,
     config: ServerConfig,
 }
 
 impl ServerState {
-    pub fn new(config: ServerConfig) -> Self {
-        Self {
+    pub async fn new(config: ServerConfig) -> Result<Self, Error> {
+        Ok(Self {
             notifications: Arc::new(DashMap::new()),
+            connections: ServerConnections::new(&config).await?,
             config,
-        }
+        })
     }
 
     async fn broadcast_message(&self, message: Message) -> Result<(), Error> {
@@ -119,44 +126,30 @@ impl SocialNetwork for ServerState {
         Ok(Response::new(response))
     }
 
-    type TimelineStream =
-        Pin<Box<dyn Stream<Item = Result<TimelineResponse, Status>> + Send + Sync>>;
+    type TimelineStream = Pin<Box<dyn Stream<Item = Result<TimelineResponse, Status>> + Send>>;
 
     async fn timeline(
         &self,
-        _request: Request<TimelineRequest>,
+        request: Request<TimelineRequest>,
     ) -> Result<Response<Self::TimelineStream>, Status> {
-        // TODO: This is a placeholder
-        let messages = vec![
-            Message {
-                user_id: "user1".to_string(),
-                content: "Ceci est un message d'exemple 1.".to_string(),
-                message_id: "1".to_string(),
-                read: false,
-                timestamp: 1,
-            },
-            Message {
-                user_id: "user2".to_string(),
-                content: "Ceci est un message d'exemple 2.".to_string(),
-                message_id: "2".to_string(),
-                read: false,
-                timestamp: 2,
-            },
-            Message {
-                user_id: "user3".to_string(),
-                content: "Ceci est un message d'exemple 3.".to_string(),
-                message_id: "3".to_string(),
-                read: false,
-                timestamp: 3,
-            },
-        ];
+        let timeline_request = request.into_inner();
+        let user = UserRef::from_str_uuid(timeline_request.user_id)
+            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
 
-        let stream = futures::stream::iter(messages.into_iter().map(|message| {
-            let response = TimelineResponse {
-                messages: vec![message],
-            };
-            Ok(response)
-        }));
+        let stream = user
+            .get_timeline(self.connections.get_pg(), &self.connections.get_scylla())
+            .await
+            .map_err(|e| Status::internal(format!("{e}")))?
+            .map_ok(|message| TimelineResponse {
+                messages: vec![Message {
+                    user_id: message.user_id.to_string(),
+                    message_id: message.id.to_string(),
+                    timestamp: message.date.timestamp() as u64,
+                    content: message.content,
+                    read: false,
+                }],
+            })
+            .map_err(|e| Status::internal(format!("{e}")));
 
         Ok(Response::new(Box::pin(stream)))
     }

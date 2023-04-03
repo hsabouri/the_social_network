@@ -41,7 +41,7 @@ impl<T> StreamState<T> {
 /// * Stream's `Item` must implement `Ord`
 pub struct MergeSortedStreams<T, I>
 where
-    T: Stream<Item = I>,
+    T: Stream<Item = I> + Send,
     I: Ord,
 {
     streams: Vec<(T, StreamState<I>)>,
@@ -49,7 +49,7 @@ where
 
 impl<T, I> MergeSortedStreams<T, I>
 where
-    T: Stream<Item = I>,
+    T: Stream<Item = I> + Send,
     I: Ord,
 {
     pub fn new(streams: Vec<T>) -> Self {
@@ -64,14 +64,14 @@ where
 
 impl<T, I> Unpin for MergeSortedStreams<T, I>
 where
-    T: Stream<Item = I>,
+    T: Stream<Item = I> + Send,
     I: Ord,
 {
 }
 
 impl<T, I> Stream for MergeSortedStreams<T, I>
 where
-    T: Stream<Item = I> + Unpin,
+    T: Stream<Item = I> + Unpin + Send,
     I: Ord,
 {
     type Item = I;
@@ -129,7 +129,7 @@ where
 ///     * If all streams returned an error, only the last one will be continued.
 pub struct MergeSortedTryStreams<T, E, O>
 where
-    T: Stream<Item = Result<E, O>>,
+    T: Stream<Item = Result<E, O>> + Send,
     E: Ord,
 {
     streams: Vec<(T, StreamState<Result<E, O>>)>,
@@ -137,7 +137,7 @@ where
 
 impl<T, E, O> MergeSortedTryStreams<T, E, O>
 where
-    T: Stream<Item = Result<E, O>>,
+    T: Stream<Item = Result<E, O>> + Send,
     E: Ord,
 {
     pub fn new(streams: Vec<T>) -> Self {
@@ -152,14 +152,14 @@ where
 
 impl<T, E, O> Unpin for MergeSortedTryStreams<T, E, O>
 where
-    T: Stream<Item = Result<E, O>>,
+    T: Stream<Item = Result<E, O>> + Send,
     E: Ord,
 {
 }
 
 impl<T, E, O> Stream for MergeSortedTryStreams<T, E, O>
 where
-    T: Stream<Item = Result<E, O>> + Unpin,
+    T: Stream<Item = Result<E, O>> + Unpin + Send,
     E: Ord,
 {
     type Item = Result<E, O>;

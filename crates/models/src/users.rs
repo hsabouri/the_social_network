@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use anyhow::Error;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, StreamExt};
 use scylla::Session;
-use sqlx::PgExecutor;
+use sqlx::{PgExecutor, PgPool};
 use uuid::Uuid;
 
 use stream_helpers::MergeSortedTryStreams;
@@ -23,7 +25,7 @@ use crate::{
 pub trait Userlike {
     fn get_uuid(&self) -> Uuid;
 
-    fn delete<'a, T: PgExecutor<'a> + Copy>(&self) -> DeleteUserRequest<T> {
+    fn delete(&self) -> DeleteUserRequest {
         DeleteUserRequest::new(self.get_uuid())
     }
 
@@ -39,17 +41,17 @@ pub trait Userlike {
         GetLastMessagesOfUserRequest::new(self.get_uuid())
     }
 
-    fn get_friends<'a, T: PgExecutor<'a> + Copy>(&self) -> GetFriendsOfUserRequest<T> {
+    fn get_friends(&self) -> GetFriendsOfUserRequest {
         GetFriendsOfUserRequest::new(self.get_uuid())
     }
 
-    fn insert<'a, T: PgExecutor<'a> + Copy>(name: String) -> InsertUserRequest<T> {
+    fn insert(name: String) -> InsertUserRequest {
         InsertUserRequest::new(name)
     }
 
-    async fn get_timeline<'a, T: 'a + PgExecutor<'a> + Copy>(
+    async fn get_timeline<'a>(
         &self,
-        conn: T,
+        conn: &'a PgPool,
         session: &'a Session,
     ) -> Result<BoxStream<'a, Result<Message, Error>>, Error> {
         let friends = self
@@ -61,7 +63,7 @@ pub trait Userlike {
         let friends_streams: Vec<_> = friends
             .into_iter()
             .filter_map(|f| f.ok())
-            .map(|f| Box::pin(f.get_messages().stream(session)))
+            .map(|f| Box::pin(f.get_messages().stream(&*session)))
             .collect();
 
         Ok(Box::pin(MergeSortedTryStreams::new(friends_streams)))
@@ -80,8 +82,18 @@ impl Userlike for UserRef {
 }
 
 impl UserRef {
+    pub fn from_str_uuid(user_id: impl AsRef<str>) -> Result<Self, Error> {
+        let uuid = Uuid::try_parse(user_id.as_ref())?;
+
+        Ok(Self::new(uuid))
+    }
+
+    pub fn new(user_id: Uuid) -> Self {
+        Self(user_id)
+    }
+
     /// Retrieves full user information from DB and returns a `User`.
-    pub async fn get_full_user<'a, T: PgExecutor<'a> + Copy>(self, conn: T) -> Result<User, Error> {
+    pub async fn get_full_user(self, conn: PgPool) -> Result<User, Error> {
         GetUser::new(self.0).get(conn).await
     }
 }
