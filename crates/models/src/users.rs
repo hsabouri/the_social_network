@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use anyhow::Error;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, StreamExt};
 use scylla::Session;
-use sqlx::{PgExecutor, PgPool};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use stream_helpers::MergeSortedTryStreams;

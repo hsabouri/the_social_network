@@ -1,8 +1,6 @@
-use std::marker::PhantomData;
-
 use anyhow::Error;
 use futures::{stream::StreamExt, Stream};
-use sqlx::{postgres::PgExecutor, PgPool};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::users::{User, UserRef};
@@ -77,7 +75,7 @@ impl DeleteUserRequest {
     }
 
     pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
-        let res = sqlx::query!(
+        let _res = sqlx::query!(
             // language=PostgreSQL
             r#"
                 DELETE FROM users WHERE user_id = $1

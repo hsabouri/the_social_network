@@ -1,7 +1,7 @@
 use anyhow::Error;
 use async_trait::async_trait;
 use futures::stream::StreamExt;
-use futures::{FutureExt, Stream, TryStreamExt};
+use futures::Stream;
 use tonic::transport::Channel;
 
 use proto::social_network_client::SocialNetworkClient;

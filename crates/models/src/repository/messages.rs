@@ -2,7 +2,7 @@ use anyhow::Error;
 use chrono::{Duration, NaiveDateTime};
 use futures::{FutureExt, Stream, StreamExt};
 use scylla::frame::value::Timestamp;
-use scylla::{QueryResult, Session};
+use scylla::Session;
 use uuid::Uuid;
 
 use crate::messages::Message;

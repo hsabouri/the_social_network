@@ -1,6 +1,6 @@
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use futures::Stream;
-use scylla::frame::value::{Time, Timestamp};
+use scylla::frame::value::Timestamp;
 
 pub mod messages;
 pub mod users;

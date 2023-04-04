@@ -1,10 +1,8 @@
 use anyhow::Error;
 use config::ServerConfig;
 use dashmap::DashMap;
-use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{Stream, TryStreamExt};
 use models::users::{User, UserRef, Userlike};
-use scylla::Session;
-use sqlx::PgPool;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -21,7 +19,7 @@ use crate::connections::ServerConnections;
 pub struct ServerState {
     notifications: Arc<DashMap<String, broadcast::Sender<Message>>>,
     connections: ServerConnections,
-    config: ServerConfig,
+    _config: ServerConfig,
 }
 
 impl ServerState {
@@ -29,7 +27,7 @@ impl ServerState {
         Ok(Self {
             notifications: Arc::new(DashMap::new()),
             connections: ServerConnections::new(&config).await?,
-            config,
+            _config: config,
         })
     }
 
@@ -55,28 +53,28 @@ impl ServerState {
 impl SocialNetwork for ServerState {
     async fn add_friend(
         &self,
-        request: Request<FriendRequest>,
+        _request: Request<FriendRequest>,
     ) -> Result<Response<FriendResponse>, Status> {
         todo!()
     }
 
     async fn remove_friend(
         &self,
-        request: Request<FriendRequest>,
+        _request: Request<FriendRequest>,
     ) -> Result<Response<FriendResponse>, Status> {
         todo!()
     }
 
     async fn tag_read_message(
         &self,
-        request: Request<MessageRequest>,
+        _request: Request<MessageRequest>,
     ) -> Result<Response<MessageStatusResponse>, Status> {
         todo!()
     }
 
     async fn tag_unread_message(
         &self,
-        request: Request<MessageRequest>,
+        _request: Request<MessageRequest>,
     ) -> Result<Response<MessageStatusResponse>, Status> {
         todo!()
     }
