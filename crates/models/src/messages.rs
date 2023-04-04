@@ -1,7 +1,58 @@
+use anyhow::Error;
+use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
-use crate::repository::messages::{InsertMessageRequest, SeenMessageRequest};
+use crate::{
+    repository::messages::{AddSeenTagRequest, InsertMessageRequest, RemoveSeenTagRequest},
+    users::Userlike,
+};
+
+#[async_trait]
+pub trait Messagelike {
+    fn get_uuid(&self) -> Uuid;
+
+    fn insert(user: impl Userlike, content: String) -> InsertMessageRequest {
+        InsertMessageRequest::new(user.get_uuid(), content)
+    }
+
+    fn seen_by(&self, user: impl Userlike) -> AddSeenTagRequest {
+        AddSeenTagRequest::new(self.get_uuid(), user.get_uuid())
+    }
+
+    fn unseen_by(&self, user: impl Userlike) -> RemoveSeenTagRequest {
+        RemoveSeenTagRequest::new(self.get_uuid(), user.get_uuid())
+    }
+}
+
+impl Messagelike for Uuid {
+    fn get_uuid(&self) -> Uuid {
+        *self
+    }
+}
+
+/// Stores only the Uuid of the message.
+/// Provides methods to easily get the full message infos at the expense of a request to DB.
+#[derive(Clone, Copy)]
+pub struct MessageRef(pub Uuid);
+
+impl Messagelike for MessageRef {
+    fn get_uuid(&self) -> Uuid {
+        self.0
+    }
+}
+
+impl MessageRef {
+    pub fn from_str_uuid(message_id: impl AsRef<str>) -> Result<Self, Error> {
+        let uuid = Uuid::try_parse(message_id.as_ref())?;
+
+        Ok(Self::new(uuid))
+    }
+
+    pub fn new(message_id: Uuid) -> Self {
+        Self(message_id)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Message {
@@ -11,13 +62,9 @@ pub struct Message {
     pub content: String,
 }
 
-impl Message {
-    pub fn insert(user_id: Uuid, content: String) -> InsertMessageRequest {
-        InsertMessageRequest::new(user_id, content)
-    }
-
-    pub fn seen_by(&self, user_id: Uuid) -> SeenMessageRequest {
-        SeenMessageRequest::new(self.id, user_id)
+impl Messagelike for Message {
+    fn get_uuid(&self) -> Uuid {
+        self.id
     }
 }
 

@@ -136,6 +136,53 @@ impl InsertFriendshipRequest {
     }
 }
 
+/// Removes frienship in both ways in a transaction
+#[derive(Copy, Clone)]
+pub struct RemoveFriendshipRequest {
+    pub user_a: Uuid,
+    pub user_b: Uuid,
+}
+
+impl RemoveFriendshipRequest {
+    pub fn new(user_a: Uuid, user_b: Uuid) -> Self {
+        Self { user_a, user_b }
+    }
+
+    pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
+        let mut t = conn.begin().await?;
+
+        sqlx::query!(
+            // language=PostgreSQL
+            r#"
+                DELETE FROM friendships
+                    WHERE user_id = $1
+                    AND friend_id = $2
+            "#,
+            self.user_a,
+            self.user_b,
+        )
+        .execute(&mut t)
+        .await?;
+
+        sqlx::query!(
+            // language=PostgreSQL
+            r#"
+                DELETE FROM friendships
+                    WHERE friend_id = $1
+                    AND user_id = $2
+            "#,
+            self.user_a,
+            self.user_b,
+        )
+        .execute(&mut t)
+        .await?;
+
+        t.commit().await?;
+
+        Ok(())
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct GetFriendsOfUserRequest {
     pub user_id: Uuid,

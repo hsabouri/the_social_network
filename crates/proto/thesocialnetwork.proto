@@ -8,8 +8,8 @@ service SocialNetwork {
   rpc RemoveFriend (FriendRequest) returns (FriendResponse);
   rpc PostMessage (PostMessageRequest) returns (MessageStatusResponse);
   rpc Timeline (TimelineRequest) returns (stream TimelineResponse);
-  rpc TagReadMessage (MessageRequest) returns (MessageStatusResponse);
-  rpc TagUnreadMessage (MessageRequest) returns (MessageStatusResponse);
+  rpc TagReadMessage (MessageTagRequest) returns (MessageStatusResponse);
+  rpc TagUnreadMessage (MessageTagRequest) returns (MessageStatusResponse);
   rpc RealTimeNotifications (NotificationsRequest) returns (stream NotificationsResponse);
 }
 
@@ -29,6 +29,11 @@ message FriendRequest {
 
 message FriendResponse {
   bool success = 1;
+}
+
+message MessageTagRequest {
+  string user_id = 1;
+  string message_id = 2;
 }
 
 message MessageRequest {

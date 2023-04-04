@@ -2,6 +2,7 @@ use anyhow::Error;
 use config::ServerConfig;
 use dashmap::DashMap;
 use futures::{Stream, TryStreamExt};
+use models::messages::{MessageRef, Messagelike};
 use models::users::{User, UserRef, Userlike};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -53,30 +54,84 @@ impl ServerState {
 impl SocialNetwork for ServerState {
     async fn add_friend(
         &self,
-        _request: Request<FriendRequest>,
+        request: Request<FriendRequest>,
     ) -> Result<Response<FriendResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+
+        let user = UserRef::from_str_uuid(request.user_id)
+            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+        let friend = UserRef::from_str_uuid(request.friend_id)
+            .map_err(|_| Status::invalid_argument("Malformed friend Uuid"))?;
+
+        let _ = user
+            .friend_with(friend)
+            .execute(self.connections.get_pg())
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        Ok(Response::new(FriendResponse { success: true }))
     }
 
     async fn remove_friend(
         &self,
-        _request: Request<FriendRequest>,
+        request: Request<FriendRequest>,
     ) -> Result<Response<FriendResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+
+        let user = UserRef::from_str_uuid(request.user_id)
+            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+        let friend = UserRef::from_str_uuid(request.friend_id)
+            .map_err(|_| Status::invalid_argument("Malformed friend Uuid"))?;
+
+        let _ = user
+            .remove_friend(friend)
+            .execute(self.connections.get_pg())
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        Ok(Response::new(FriendResponse { success: true }))
     }
 
     async fn tag_read_message(
         &self,
-        _request: Request<MessageRequest>,
+        request: Request<MessageTagRequest>,
     ) -> Result<Response<MessageStatusResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+
+        let user = UserRef::from_str_uuid(request.user_id)
+            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+
+        let message = MessageRef::from_str_uuid(request.message_id)
+            .map_err(|_| Status::invalid_argument("Malformed message Uuid"))?;
+
+        let _ = message
+            .seen_by(user)
+            .execute(self.connections.get_scylla())
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        Ok(Response::new(MessageStatusResponse { success: true }))
     }
 
     async fn tag_unread_message(
         &self,
-        _request: Request<MessageRequest>,
+        request: Request<MessageTagRequest>,
     ) -> Result<Response<MessageStatusResponse>, Status> {
-        todo!()
+        let request = request.into_inner();
+
+        let user = UserRef::from_str_uuid(request.user_id)
+            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+
+        let message = MessageRef::from_str_uuid(request.message_id)
+            .map_err(|_| Status::invalid_argument("Malformed message Uuid"))?;
+
+        let _ = message
+            .unseen_by(user)
+            .execute(self.connections.get_scylla())
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        Ok(Response::new(MessageStatusResponse { success: true }))
     }
 
     async fn get_user_by_name(

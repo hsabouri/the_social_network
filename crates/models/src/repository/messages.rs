@@ -143,12 +143,12 @@ impl GetLastMessagesOfUserRequest {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct SeenMessageRequest {
+pub struct AddSeenTagRequest {
     pub user_id: Uuid,
     pub message_id: Uuid,
 }
 
-impl SeenMessageRequest {
+impl AddSeenTagRequest {
     pub fn new(message_id: Uuid, user_id: Uuid) -> Self {
         Self {
             user_id,
@@ -161,6 +161,32 @@ impl SeenMessageRequest {
             .query(
                 r#"INSERT INTO read_tags (user_id, message_id)
                 VALUES (?, ?)"#,
+                (self.user_id, self.message_id),
+            )
+            .await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RemoveSeenTagRequest {
+    pub user_id: Uuid,
+    pub message_id: Uuid,
+}
+
+impl RemoveSeenTagRequest {
+    pub fn new(message_id: Uuid, user_id: Uuid) -> Self {
+        Self {
+            user_id,
+            message_id,
+        }
+    }
+
+    pub async fn execute(self, session: &Session) -> Result<(), Error> {
+        let _ = session
+            .query(
+                r#"DELETE FROM read_tags WHERE user_id = ? AND message_id = ?"#,
                 (self.user_id, self.message_id),
             )
             .await?;

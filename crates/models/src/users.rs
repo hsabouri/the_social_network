@@ -11,10 +11,7 @@ use crate::{
     messages::Message,
     repository::{
         messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
-        users::{
-            DeleteUserRequest, GetFriendsOfUserRequest, GetUser, GetUserByNameRequest,
-            InsertFriendshipRequest, InsertUserRequest,
-        },
+        users::*,
     },
 };
 
@@ -29,6 +26,10 @@ pub trait Userlike {
 
     fn friend_with(&self, other: impl Userlike) -> InsertFriendshipRequest {
         InsertFriendshipRequest::new(self.get_uuid(), other.get_uuid())
+    }
+
+    fn remove_friend(&self, other: impl Userlike) -> RemoveFriendshipRequest {
+        RemoveFriendshipRequest::new(self.get_uuid(), other.get_uuid())
     }
 
     fn insert_message(&self, content: String) -> InsertMessageRequest {
@@ -65,6 +66,12 @@ pub trait Userlike {
             .collect();
 
         Ok(Box::pin(MergeSortedTryStreams::new(friends_streams)))
+    }
+}
+
+impl Userlike for Uuid {
+    fn get_uuid(&self) -> Uuid {
+        *self
     }
 }
 
