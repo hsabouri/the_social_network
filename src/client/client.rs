@@ -10,12 +10,15 @@ use proto::social_network_client::SocialNetworkClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let user_id: String = asking::text()
-        .message("What is you user id ?\n")
+    let name: String = asking::text()
+        .message("What is you user name (Alice, Bob, Charlie) ?\n")
         .ask_and_wait()?;
     let client = SocialNetworkClient::connect("http://[::1]:50051")
         .await?
-        .auth(user_id)?;
+        .auth_by_name(name)
+        .await?;
+
+    println!("Your UUID: {}", client.user_id);
 
     // Subscribe to real-time messages :
     let notifs = client.clone().handle_notifs();

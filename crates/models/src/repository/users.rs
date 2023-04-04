@@ -16,7 +16,7 @@ impl GetUser {
         Self { user_id }
     }
 
-    pub async fn get(self, conn: PgPool) -> Result<User, Error> {
+    pub async fn execute(self, conn: &PgPool) -> Result<User, Error> {
         let res = sqlx::query!(
             // language=PostgreSQL
             r#"
@@ -24,7 +24,7 @@ impl GetUser {
             "#,
             self.user_id,
         )
-        .fetch_one(&conn)
+        .fetch_one(conn)
         .await?;
 
         Ok(User {
@@ -45,7 +45,7 @@ impl InsertUserRequest {
         Self { name }
     }
 
-    pub async fn execute(self, conn: PgPool) -> Result<User, Error> {
+    pub async fn execute(self, conn: &PgPool) -> Result<User, Error> {
         let res = sqlx::query!(
             // language=PostgreSQL
             r#"
@@ -55,7 +55,7 @@ impl InsertUserRequest {
             "#,
             self.name,
         )
-        .fetch_one(&conn)
+        .fetch_one(conn)
         .await?;
 
         Ok(User {
@@ -76,7 +76,7 @@ impl DeleteUserRequest {
         Self { uuid }
     }
 
-    pub async fn execute(self, conn: PgPool) -> Result<(), Error> {
+    pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
         let res = sqlx::query!(
             // language=PostgreSQL
             r#"
@@ -84,7 +84,7 @@ impl DeleteUserRequest {
             "#,
             self.uuid,
         )
-        .fetch_one(&conn)
+        .fetch_one(conn)
         .await?;
 
         Ok(())
@@ -105,7 +105,7 @@ impl InsertFriendshipRequest {
         Self { user_a, user_b }
     }
 
-    pub async fn execute(self, conn: PgPool) -> Result<(), Error> {
+    pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
         let mut t = conn.begin().await?;
 
         sqlx::query!(
@@ -158,5 +158,32 @@ impl GetFriendsOfUserRequest {
         )
         .fetch(conn)
         .map(|record| Ok(record.map(|record| UserRef(record.user_id))?))
+    }
+}
+
+pub struct GetUserByNameRequest {
+    pub name: String,
+}
+
+impl GetUserByNameRequest {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+
+    pub async fn execute(self, conn: &PgPool) -> Result<User, Error> {
+        let res = sqlx::query!(
+            // language=PostgreSQL
+            r#"
+                SELECT user_id FROM users WHERE name = $1
+            "#,
+            self.name,
+        )
+        .fetch_one(conn)
+        .await?;
+
+        Ok(User {
+            id: res.user_id,
+            name: self.name,
+        })
     }
 }

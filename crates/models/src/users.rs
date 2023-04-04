@@ -14,8 +14,8 @@ use crate::{
     repository::{
         messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
         users::{
-            DeleteUserRequest, GetFriendsOfUserRequest, GetUser, InsertFriendshipRequest,
-            InsertUserRequest,
+            DeleteUserRequest, GetFriendsOfUserRequest, GetUser, GetUserByNameRequest,
+            InsertFriendshipRequest, InsertUserRequest,
         },
     },
 };
@@ -93,8 +93,8 @@ impl UserRef {
     }
 
     /// Retrieves full user information from DB and returns a `User`.
-    pub async fn get_full_user(self, conn: PgPool) -> Result<User, Error> {
-        GetUser::new(self.0).get(conn).await
+    pub async fn get_full_user(self, conn: &PgPool) -> Result<User, Error> {
+        GetUser::new(self.0).execute(conn).await
     }
 }
 
@@ -102,6 +102,12 @@ impl UserRef {
 pub struct User {
     pub id: Uuid,
     pub name: String,
+}
+
+impl User {
+    pub fn get_by_name(name: String) -> GetUserByNameRequest {
+        GetUserByNameRequest::new(name)
+    }
 }
 
 impl Userlike for User {

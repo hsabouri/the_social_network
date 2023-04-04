@@ -1,15 +1,19 @@
 use anyhow::Error;
+use async_trait::async_trait;
 use futures::stream::StreamExt;
 use futures::{FutureExt, Stream, TryStreamExt};
 use tonic::transport::Channel;
 
 use proto::social_network_client::SocialNetworkClient;
-use proto::{FriendRequest, Message, NotificationsRequest, PostMessageRequest, TimelineRequest};
+use proto::{
+    FriendRequest, Message, NotificationsRequest, PostMessageRequest, TimelineRequest,
+    UserByNameRequest,
+};
 
 /// Placeholder authentication system. It is used to store the user_id along with the gRPC client.
 #[derive(Clone, Debug)]
 pub struct Connector<T = SocialNetworkClient<Channel>> {
-    user_id: String,
+    pub user_id: String,
     _inner: T,
 }
 
@@ -112,14 +116,30 @@ impl Connector<SocialNetworkClient<Channel>> {
     }
 }
 
+#[async_trait]
 pub trait Auth<T> {
     fn auth(self, user_id: String) -> Result<Connector<T>, Error>;
+    async fn auth_by_name(self, name: String) -> Result<Connector<T>, Error>;
 }
 
-impl<T> Auth<SocialNetworkClient<T>> for SocialNetworkClient<T> {
+#[async_trait]
+impl Auth<SocialNetworkClient<Channel>> for SocialNetworkClient<Channel> {
     fn auth(self, user_id: String) -> Result<Connector<Self>, Error> {
         Ok(Connector {
             user_id,
+            _inner: self,
+        })
+    }
+
+    async fn auth_by_name(self, name: String) -> Result<Connector<Self>, Error> {
+        let res = self
+            .clone()
+            .get_user_by_name(UserByNameRequest { name })
+            .await?
+            .into_inner();
+
+        Ok(Connector {
+            user_id: res.user_id,
             _inner: self,
         })
     }

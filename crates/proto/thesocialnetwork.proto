@@ -3,6 +3,7 @@ syntax = "proto3";
 package thesocialnetwork;
 
 service SocialNetwork {
+  rpc GetUserByName (UserByNameRequest) returns (UserResponse);
   rpc AddFriend (FriendRequest) returns (FriendResponse);
   rpc RemoveFriend (FriendRequest) returns (FriendResponse);
   rpc PostMessage (PostMessageRequest) returns (MessageStatusResponse);
@@ -10,6 +11,15 @@ service SocialNetwork {
   rpc TagReadMessage (MessageRequest) returns (MessageStatusResponse);
   rpc TagUnreadMessage (MessageRequest) returns (MessageStatusResponse);
   rpc RealTimeNotifications (NotificationsRequest) returns (stream NotificationsResponse);
+}
+
+message UserByNameRequest {
+  string name = 1;
+}
+
+message UserResponse {
+  string user_id = 1;
+  string name = 2;
 }
 
 message FriendRequest {

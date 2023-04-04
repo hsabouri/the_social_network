@@ -2,7 +2,7 @@ use anyhow::Error;
 use config::ServerConfig;
 use dashmap::DashMap;
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
-use models::users::{UserRef, Userlike};
+use models::users::{User, UserRef, Userlike};
 use scylla::Session;
 use sqlx::PgPool;
 use std::pin::Pin;
@@ -13,11 +13,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status};
 
 use proto::social_network_server::SocialNetwork;
-use proto::{
-    FriendRequest, FriendResponse, Message, MessageRequest, MessageStatusResponse,
-    NotificationsRequest, NotificationsResponse, PostMessageRequest, TimelineRequest,
-    TimelineResponse,
-};
+use proto::*;
 
 use crate::connections::ServerConnections;
 
@@ -83,6 +79,23 @@ impl SocialNetwork for ServerState {
         request: Request<MessageRequest>,
     ) -> Result<Response<MessageStatusResponse>, Status> {
         todo!()
+    }
+
+    async fn get_user_by_name(
+        &self,
+        request: Request<UserByNameRequest>,
+    ) -> Result<Response<UserResponse>, Status> {
+        let request = request.into_inner();
+
+        let user = User::get_by_name(request.name)
+            .execute(self.connections.get_pg())
+            .await
+            .map_err(|e| Status::internal(format!("{e}")))?;
+
+        Ok(Response::new(UserResponse {
+            name: user.name,
+            user_id: user.id.to_string(),
+        }))
     }
 
     async fn post_message(
