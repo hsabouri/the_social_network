@@ -2,14 +2,14 @@ use anyhow::Error;
 use config::ServerConfig;
 use dashmap::DashMap;
 use futures::{Stream, TryStreamExt};
-use models::messages::{MessageRef, Messagelike};
+use models::messages::{Message, MessageRef, Messagelike};
 use models::users::{User, UserRef, Userlike};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
 
 use proto::social_network_server::SocialNetwork;
 use proto::*;
@@ -22,7 +22,7 @@ use helpers::*;
 
 #[derive(Clone)]
 pub struct ServerState {
-    notifications: Arc<DashMap<String, broadcast::Sender<Message>>>,
+    notifications: Arc<DashMap<Uuid, broadcast::Sender<Message>>>,
     connections: ServerConnections,
     _config: ServerConfig,
 }
@@ -62,10 +62,10 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<FriendResponse>, Status> {
         let request = request.into_inner();
 
-        let user = UserRef::from_str_uuid(request.user_id)
-            .map_err(Status::error_invalid_argument)?;
-        let friend = UserRef::from_str_uuid(request.friend_id)
-            .map_err(Status::error_invalid_argument)?;
+        let user =
+            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
+        let friend =
+            UserRef::from_str_uuid(request.friend_id).map_err(Status::error_invalid_argument)?;
 
         let _ = user
             .friend_with(friend)
@@ -82,10 +82,10 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<FriendResponse>, Status> {
         let request = request.into_inner();
 
-        let user = UserRef::from_str_uuid(request.user_id)
-            .map_err(Status::error_invalid_argument)?;
-        let friend = UserRef::from_str_uuid(request.friend_id)
-            .map_err(Status::error_invalid_argument)?;
+        let user =
+            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
+        let friend =
+            UserRef::from_str_uuid(request.friend_id).map_err(Status::error_invalid_argument)?;
 
         let _ = user
             .remove_friend(friend)
@@ -102,8 +102,8 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<MessageStatusResponse>, Status> {
         let request = request.into_inner();
 
-        let user = UserRef::from_str_uuid(request.user_id)
-            .map_err(Status::error_invalid_argument)?;
+        let user =
+            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
 
         let message = MessageRef::from_str_uuid(request.message_id)
             .map_err(Status::error_invalid_argument)?;
@@ -123,8 +123,8 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<MessageStatusResponse>, Status> {
         let request = request.into_inner();
 
-        let user = UserRef::from_str_uuid(request.user_id)
-            .map_err(Status::error_invalid_argument)?;
+        let user =
+            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
 
         let message = MessageRef::from_str_uuid(request.message_id)
             .map_err(Status::error_invalid_argument)?;
@@ -159,37 +159,36 @@ impl SocialNetwork for ServerState {
         &self,
         request: Request<PostMessageRequest>,
     ) -> Result<Response<MessageStatusResponse>, Status> {
-        let message = request.into_inner();
-        let preview = message
+        let request = request.into_inner();
+        let preview = request
             .content
             .chars()
             .take(15)
-            .chain("[...]".chars())
+            .chain("[…]".chars())
             .collect::<String>();
 
         println!(
             r#"User {} posted a new message: "{}""#,
-            message.user_id, preview
+            request.user_id, preview
         );
 
-        let message = Message {
-            user_id: message.user_id,
-            content: message.content,
-            message_id: "FIXME".to_string(),
-            read: false,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        };
-        // TODO: Store in DB
+        let user =
+            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
+
+        let message = Message::new(user, request.content);
 
         // Stream to other connected users.
-        let f = self.broadcast_message(message).await;
+        let f = self.broadcast_message(message.clone()).await;
         match f {
             Err(e) => println!("Error while broadcasing message: {e}"),
             _ => (),
         };
+
+        let _ = message
+            .insert()
+            .execute(self.connections.get_scylla())
+            .await
+            .map_err(Status::error_internal);
 
         let response = MessageStatusResponse { success: true };
 
@@ -211,7 +210,7 @@ impl SocialNetwork for ServerState {
             .await
             .map_err(Status::error_internal)?
             .map_ok(|message| TimelineResponse {
-                messages: vec![Message {
+                messages: vec![proto::Message {
                     user_id: message.user_id.to_string(),
                     message_id: message.id.to_string(),
                     timestamp: message.date.timestamp() as u64,
@@ -232,7 +231,8 @@ impl SocialNetwork for ServerState {
         request: Request<NotificationsRequest>,
     ) -> Result<Response<Self::RealTimeNotificationsStream>, Status> {
         let request = request.into_inner();
-        let user_id = request.user_id;
+        let user_id =
+            Uuid::parse_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
 
         self.notifications
             .entry(user_id.clone())
@@ -246,7 +246,13 @@ impl SocialNetwork for ServerState {
         let rx = self.notifications.get(&user_id).unwrap().subscribe();
         let stream = BroadcastStream::new(rx)
             .map_ok(|message| NotificationsResponse {
-                message: Some(message),
+                message: Some(proto::Message {
+                    user_id: message.user_id.to_string(),
+                    message_id: message.id.to_string(),
+                    timestamp: message.date.timestamp() as u64,
+                    content: message.content,
+                    read: false,
+                }),
             })
             .map_err(Status::error_internal);
 

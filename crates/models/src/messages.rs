@@ -12,10 +12,6 @@ use crate::{
 pub trait Messagelike {
     fn get_uuid(&self) -> Uuid;
 
-    fn insert(user: impl Userlike, content: String) -> InsertMessageRequest {
-        InsertMessageRequest::new(user.get_uuid(), content)
-    }
-
     fn seen_by(&self, user: impl Userlike) -> AddSeenTagRequest {
         AddSeenTagRequest::new(self.get_uuid(), user.get_uuid())
     }
@@ -61,6 +57,24 @@ pub struct Message {
     pub user_id: Uuid,
     pub date: NaiveDateTime,
     pub content: String,
+}
+
+impl Message {
+    /// This will generate an UUID, to be broadcasted and inserted in DB at the same time.
+    pub fn new(user: impl Userlike, content: String) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            user_id: user.get_uuid(),
+            date: chrono::offset::Local::now().naive_local(),
+            content,
+        }
+    }
+
+    pub fn insert(&self) -> InsertMessageRequest {
+        InsertMessageRequest::new(self.user_id, self.content.clone())
+            .with_datetime(self.date)
+            .with_uuid(self.id)
+    }
 }
 
 impl Messagelike for Message {

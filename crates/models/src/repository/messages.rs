@@ -15,7 +15,7 @@ use super::{timestamp_to_naive, TimeBucket};
 /// Message UUID is generated here and not by DB because it cannot be easily returned.
 #[derive(Clone, Debug)]
 pub struct InsertMessageRequest {
-    pub message_id: Uuid,
+    pub message_id: Option<Uuid>,
     pub user_id: Uuid,
     pub content: String,
     pub datetime: Option<NaiveDateTime>,
@@ -34,7 +34,7 @@ impl InsertMessageRequest {
     /// Fixes the timestamp bucket
     pub fn new(user_id: Uuid, content: String) -> Self {
         Self {
-            message_id: Uuid::new_v4(),
+            message_id: None,
             user_id,
             content,
             datetime: None,
@@ -48,15 +48,23 @@ impl InsertMessageRequest {
         }
     }
 
+    pub fn with_uuid(self, message_id: Uuid) -> Self {
+        Self {
+            message_id: Some(message_id),
+            ..self
+        }
+    }
+
     pub async fn execute(self, session: &Session) -> Result<Uuid, Error> {
         let datetime = self
             .datetime
             .unwrap_or_else(|| chrono::offset::Local::now().naive_local());
+        let uuid = self.message_id.unwrap_or_else(|| Uuid::new_v4());
         let (timestamp, bucket_timestamp) = Self::get_timestamps(datetime);
 
         session
             .query("INSERT INTO messages (message_id, user_id, date_bucket, date, content) VALUES (?, ?, ?, ?, ?)", (
-                self.message_id,
+                uuid,
                 self.user_id,
                 bucket_timestamp,
                 timestamp,
@@ -64,7 +72,7 @@ impl InsertMessageRequest {
             ))
             .await?;
 
-        Ok(self.message_id)
+        Ok(uuid)
     }
 }
 
