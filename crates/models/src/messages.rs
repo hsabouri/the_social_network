@@ -44,7 +44,8 @@ impl Messagelike for MessageRef {
 
 impl MessageRef {
     pub fn from_str_uuid(message_id: impl AsRef<str>) -> Result<Self, Error> {
-        let uuid = Uuid::try_parse(message_id.as_ref())?;
+        let uuid = Uuid::try_parse(message_id.as_ref())
+            .map_err(|e| Error::from(e).context("malformed UUID"))?;
 
         Ok(Self::new(uuid))
     }

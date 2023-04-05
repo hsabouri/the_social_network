@@ -1,7 +1,8 @@
 {
     "listening_addr": "[::1]:50051",
     "scylladb": {
-        "hostnames": ["127.0.0.1:9042"]
+        "hostnames": ["127.0.0.1:9042"],
+        "keyspace": "my_social_network"
     },
     "postgresql": {
         "host": "127.0.0.1",

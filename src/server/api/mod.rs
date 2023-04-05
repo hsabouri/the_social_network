@@ -16,6 +16,10 @@ use proto::*;
 
 use crate::connections::ServerConnections;
 
+mod helpers;
+
+use helpers::*;
+
 #[derive(Clone)]
 pub struct ServerState {
     notifications: Arc<DashMap<String, broadcast::Sender<Message>>>,
@@ -59,9 +63,9 @@ impl SocialNetwork for ServerState {
         let request = request.into_inner();
 
         let user = UserRef::from_str_uuid(request.user_id)
-            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
         let friend = UserRef::from_str_uuid(request.friend_id)
-            .map_err(|_| Status::invalid_argument("Malformed friend Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
 
         let _ = user
             .friend_with(friend)
@@ -79,9 +83,9 @@ impl SocialNetwork for ServerState {
         let request = request.into_inner();
 
         let user = UserRef::from_str_uuid(request.user_id)
-            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
         let friend = UserRef::from_str_uuid(request.friend_id)
-            .map_err(|_| Status::invalid_argument("Malformed friend Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
 
         let _ = user
             .remove_friend(friend)
@@ -99,10 +103,10 @@ impl SocialNetwork for ServerState {
         let request = request.into_inner();
 
         let user = UserRef::from_str_uuid(request.user_id)
-            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
 
         let message = MessageRef::from_str_uuid(request.message_id)
-            .map_err(|_| Status::invalid_argument("Malformed message Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
 
         let _ = message
             .seen_by(user)
@@ -120,10 +124,10 @@ impl SocialNetwork for ServerState {
         let request = request.into_inner();
 
         let user = UserRef::from_str_uuid(request.user_id)
-            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
 
         let message = MessageRef::from_str_uuid(request.message_id)
-            .map_err(|_| Status::invalid_argument("Malformed message Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
 
         let _ = message
             .unseen_by(user)
@@ -143,7 +147,7 @@ impl SocialNetwork for ServerState {
         let user = User::get_by_name(request.name)
             .execute(self.connections.get_pg())
             .await
-            .map_err(|e| Status::internal(format!("{e}")))?;
+            .map_err(Status::error_internal)?;
 
         Ok(Response::new(UserResponse {
             name: user.name,
@@ -200,12 +204,12 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<Self::TimelineStream>, Status> {
         let timeline_request = request.into_inner();
         let user = UserRef::from_str_uuid(timeline_request.user_id)
-            .map_err(|_| Status::invalid_argument("Malformed user Uuid"))?;
+            .map_err(Status::error_invalid_argument)?;
 
         let stream = user
             .get_timeline(self.connections.get_pg(), &self.connections.get_scylla())
             .await
-            .map_err(|e| Status::internal(format!("{e}")))?
+            .map_err(Status::error_internal)?
             .map_ok(|message| TimelineResponse {
                 messages: vec![Message {
                     user_id: message.user_id.to_string(),
@@ -215,7 +219,7 @@ impl SocialNetwork for ServerState {
                     read: false,
                 }],
             })
-            .map_err(|e| Status::internal(format!("{e}")));
+            .map_err(Status::error_internal);
 
         Ok(Response::new(Box::pin(stream)))
     }
@@ -244,7 +248,7 @@ impl SocialNetwork for ServerState {
             .map_ok(|message| NotificationsResponse {
                 message: Some(message),
             })
-            .map_err(|e| Status::internal(format!("error: {e}")));
+            .map_err(Status::error_internal);
 
         println!("User {user_id} connected to live notifications.");
 

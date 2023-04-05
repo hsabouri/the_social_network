@@ -88,7 +88,8 @@ impl Userlike for UserRef {
 
 impl UserRef {
     pub fn from_str_uuid(user_id: impl AsRef<str>) -> Result<Self, Error> {
-        let uuid = Uuid::try_parse(user_id.as_ref())?;
+        let uuid = Uuid::try_parse(user_id.as_ref())
+            .map_err(|e| Error::from(e).context("malformed UUID"))?;
 
         Ok(Self::new(uuid))
     }

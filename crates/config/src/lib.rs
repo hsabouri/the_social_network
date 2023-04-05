@@ -32,11 +32,14 @@ pub type PgHost = String;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScyllaDbConfig {
     pub hostnames: Vec<ScyllaHost>,
+    pub keyspace: String,
 }
 
 impl ScyllaDbConfig {
     pub fn into_builder(&self) -> scylla::SessionBuilder {
-        scylla::SessionBuilder::new().known_nodes(self.hostnames.as_slice())
+        scylla::SessionBuilder::new()
+            .known_nodes(self.hostnames.as_slice())
+            .use_keyspace(&self.keyspace, false)
     }
 }
 
