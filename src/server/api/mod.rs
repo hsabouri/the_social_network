@@ -184,6 +184,7 @@ impl SocialNetwork for ServerState {
             _ => (),
         };
 
+        // 
         let _ = message
             .insert()
             .execute(self.connections.get_scylla())

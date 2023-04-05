@@ -1,5 +1,6 @@
 use std::{fs::File, net::SocketAddr, ops::Deref, path::Path, str::FromStr, sync::Arc};
 
+use async_nats::ConnectOptions as NatsConnectOptions;
 use serde::{de, ser, Deserialize, Serialize};
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
@@ -28,6 +29,7 @@ where
 
 pub type ScyllaHost = String;
 pub type PgHost = String;
+pub type NatsHost = String;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScyllaDbConfig {
@@ -36,7 +38,7 @@ pub struct ScyllaDbConfig {
 }
 
 impl ScyllaDbConfig {
-    pub fn into_builder(&self) -> scylla::SessionBuilder {
+    pub fn into_session_builder(&self) -> scylla::SessionBuilder {
         scylla::SessionBuilder::new()
             .known_nodes(self.hostnames.as_slice())
             .use_keyspace(&self.keyspace, false)
@@ -62,7 +64,7 @@ pub struct PostgreSqlConfig {
 }
 
 impl PostgreSqlConfig {
-    pub fn into_options(&self) -> PgConnectOptions {
+    pub fn into_connect_options(&self) -> PgConnectOptions {
         PgConnectOptions::new()
             .host(self.host.as_str())
             .port(self.port)
@@ -74,10 +76,40 @@ impl PostgreSqlConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct NatsConfig {
+    pub host: NatsHost,
+}
+
+impl NatsConfig {
+    pub fn into_connect_options(&self) -> NatsConnectOptionsWrapper {
+        let options =
+            NatsConnectOptions::new().connection_timeout(std::time::Duration::from_secs(3));
+        NatsConnectOptionsWrapper {
+            host: self.host.clone(),
+            options,
+        }
+    }
+}
+
+/// The way `async_nats::ConnectOptions` is implemented is not compatible with creating
+/// the connect options apart than connection.
+pub struct NatsConnectOptionsWrapper {
+    pub host: NatsHost,
+    pub options: NatsConnectOptions,
+}
+
+impl NatsConnectOptionsWrapper {
+    pub async fn connect(self) -> Result<async_nats::Client, async_nats::ConnectError> {
+        self.options.connect(self.host).await
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InnerServerConfig {
     pub listening_addr: SocketAddr,
     pub scylladb: ScyllaDbConfig,
     pub postgresql: PostgreSqlConfig,
+    pub nats: NatsConfig,
 }
 
 /// Can be shared between threads by using `Clone`. uses an `Arc` internally so cloning is cheap

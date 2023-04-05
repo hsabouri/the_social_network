@@ -11,5 +11,8 @@
         "password": "password",
         "database": "my_social_network_db",
         "ssl_strategy": "prefer"
+    },
+    "nats": {
+        "host": "nats://ruser:password@127.0.0.1:4222"
     }
 }
