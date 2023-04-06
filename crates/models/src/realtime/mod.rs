@@ -13,12 +13,42 @@ mod channels;
 
 use channels::*;
 
-use crate::{messages::Message, users::Userlike};
+use crate::{
+    messages::Message,
+    users::{UserRef, Userlike},
+};
+
+fn parse_proto_message(payload: prost::bytes::Bytes) -> Result<Message, Error> {
+    let m = proto::Message::decode_length_delimited(payload)?;
+
+    let message = Message {
+        id: Uuid::try_parse(m.message_id.as_str())?,
+        user_id: Uuid::try_parse(m.user_id.as_str())?,
+        date: NaiveDateTime::from_timestamp_millis(m.timestamp as i64).unwrap(),
+        content: m.content,
+    };
+
+    Ok(message)
+}
+
+fn parse_proto_friendship_notification(
+    payload: prost::bytes::Bytes,
+) -> Result<(UserRef, UserRef), Error> {
+    let friendship = proto::FriendshipNotification::decode_length_delimited(payload)?;
+
+    let user = UserRef(Uuid::try_parse(friendship.user.as_str())?);
+
+    let friend = UserRef(Uuid::try_parse(friendship.friend.as_str())?);
+
+    Ok((user, friend))
+}
 
 /// Takes a stream `T` of `I::Userlike` and outputs a stream of the newly posted messages from these users.
 ///
 /// If stream `T` is closed/finished, output stream will continue with newly posted message of all users returned by stream
 /// `T` before it closed.
+/// 
+/// Demonstrates a dynamic filter stream.
 pub struct UsersNewMessages<T, I>
 where
     T: Stream<Item = I>,
@@ -43,19 +73,6 @@ where
     }
 }
 
-fn parse_proto_message(payload: prost::bytes::Bytes) -> Result<Message, Error> {
-    let m = proto::Message::decode_length_delimited(payload)?;
-
-    let message = Message {
-        id: Uuid::try_parse(m.message_id.as_str())?,
-        user_id: Uuid::try_parse(m.user_id.as_str())?,
-        date: NaiveDateTime::from_timestamp_millis(m.timestamp as i64).unwrap(),
-        content: m.content,
-    };
-
-    Ok(message)
-}
-
 impl<T, I> Stream for UsersNewMessages<T, I>
 where
     T: Stream<Item = I> + Unpin,
@@ -68,7 +85,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         let keep_stream = if let Some(users_stream) = self.users_stream.as_mut() {
-            // Get potential new user in list
+            // Get potential new user from stream
             match users_stream.poll_next_unpin(cx) {
                 Poll::Ready(output) => match output {
                     Some(new_user) => {
@@ -100,7 +117,7 @@ where
                             } else {
                                 Poll::Pending
                             }
-                        },
+                        }
                         Err(e) => Poll::Ready(Some(Err(Error::from(e)))),
                     }
                 }
@@ -111,9 +128,41 @@ where
     }
 }
 
-/// Builder for a stream of new friendships with a specific user.
+/// Takes a user `Uuid` and outputs a stream of the new friendships for this user.
+/// Demonstrates a static filter stream.
 pub struct UserNewFriendships {
     pub user_id: Uuid,
+    inner: Pin<Box<dyn Stream<Item = Result<UserRef, Error>>>>,
+}
+
+impl UserNewFriendships {
+    pub async fn new(user_id: Uuid, client: Client) -> Result<Self, Error> {
+        let subscription = client.subscribe(CHANNEL_FRIENDSHIP.into()).await?;
+
+        let inner = subscription.filter_map(move |proto_message| async move {
+            match parse_proto_friendship_notification(proto_message.payload) {
+                Ok((user, friend)) if user.get_uuid() == user_id => Some(Ok(friend)),
+                Ok(_) => None,
+                Err(e) => Some(Err(Error::from(e))),
+            }
+        });
+
+        Ok(Self {
+            user_id,
+            inner: Box::pin(inner),
+        })
+    }
+}
+
+impl Stream for UserNewFriendships {
+    type Item = Result<UserRef, Error>;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        self.inner.poll_next_unpin(cx)
+    }
 }
 
 /// Builder for a stream of newly seen messages from a list of a user.
