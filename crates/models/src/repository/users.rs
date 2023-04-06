@@ -1,7 +1,7 @@
 use anyhow::Error;
 use futures::{stream::StreamExt, Stream};
-use sqlx::PgPool;
 use uuid::Uuid;
+use sqlx::PgPool;
 
 use crate::users::{User, UserRef};
 

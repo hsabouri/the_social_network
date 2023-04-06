@@ -44,5 +44,4 @@ members = [
     "crates/proto",
     "crates/models",
     "crates/stream_helpers",
-    "crates/realtime",
 ]
