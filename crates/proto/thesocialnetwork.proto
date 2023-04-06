@@ -73,7 +73,7 @@ message NotificationsResponse {
   Message message = 1;
 }
 
-message FriendshipNotification {
+message Friendship {
   string user = 1;
   string friend = 2;
 }
