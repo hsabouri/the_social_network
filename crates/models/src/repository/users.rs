@@ -1,17 +1,18 @@
 use anyhow::Error;
 use futures::{stream::StreamExt, Stream};
-use uuid::Uuid;
 use sqlx::PgPool;
 
 use crate::users::{User, UserRef, Userlike};
 
 pub struct GetUser {
-    pub user_id: Uuid,
+    pub user: UserRef,
 }
 
 impl GetUser {
-    pub fn new(user_id: Uuid) -> Self {
-        Self { user_id }
+    pub fn new(user_id: impl Userlike) -> Self {
+        Self {
+            user: UserRef::new(user_id.get_uuid()),
+        }
     }
 
     pub async fn execute(self, conn: &PgPool) -> Result<User, Error> {
@@ -20,13 +21,13 @@ impl GetUser {
             r#"
                 SELECT name FROM users WHERE user_id = $1
             "#,
-            self.user_id,
+            self.user.get_uuid(),
         )
         .fetch_one(conn)
         .await?;
 
         Ok(User {
-            id: self.user_id,
+            id: self.user.get_uuid(),
             name: res.name,
         })
     }
@@ -66,12 +67,14 @@ impl InsertUserRequest {
 /// Delete a user in database
 #[derive(Copy, Clone)]
 pub struct DeleteUserRequest {
-    pub uuid: Uuid,
+    pub user: UserRef,
 }
 
 impl DeleteUserRequest {
-    pub fn new(uuid: Uuid) -> Self {
-        Self { uuid }
+    pub fn new(user: impl Userlike) -> Self {
+        Self {
+            user: UserRef::new(user.get_uuid()),
+        }
     }
 
     pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
@@ -80,7 +83,7 @@ impl DeleteUserRequest {
             r#"
                 DELETE FROM users WHERE user_id = $1
             "#,
-            self.uuid,
+            self.user.get_uuid(),
         )
         .fetch_one(conn)
         .await?;
@@ -94,13 +97,16 @@ impl DeleteUserRequest {
 /// * B -> A
 #[derive(Copy, Clone)]
 pub struct InsertFriendshipRequest {
-    pub user_a: Uuid,
-    pub user_b: Uuid,
+    pub user_a: UserRef,
+    pub user_b: UserRef,
 }
 
 impl InsertFriendshipRequest {
-    pub fn new(user_a: Uuid, user_b: Uuid) -> Self {
-        Self { user_a, user_b }
+    pub fn new(user_a: impl Userlike, user_b: impl Userlike) -> Self {
+        Self {
+            user_a: UserRef::new(user_a.get_uuid()),
+            user_b: UserRef::new(user_b.get_uuid()),
+        }
     }
 
     pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
@@ -112,8 +118,8 @@ impl InsertFriendshipRequest {
                 INSERT INTO friendships (user_id, friend_id)
                     VALUES ($1, $2);
             "#,
-            self.user_a,
-            self.user_b,
+            self.user_a.get_uuid(),
+            self.user_b.get_uuid(),
         )
         .execute(&mut t)
         .await?;
@@ -124,8 +130,8 @@ impl InsertFriendshipRequest {
                 INSERT INTO friendships (user_id, friend_id)
                     VALUES ($2, $1);
             "#,
-            self.user_a,
-            self.user_b,
+            self.user_a.get_uuid(),
+            self.user_b.get_uuid(),
         )
         .execute(&mut t)
         .await?;
@@ -139,13 +145,16 @@ impl InsertFriendshipRequest {
 /// Removes frienship in both ways in a transaction
 #[derive(Copy, Clone)]
 pub struct RemoveFriendshipRequest {
-    pub user_a: Uuid,
-    pub user_b: Uuid,
+    pub user_a: UserRef,
+    pub user_b: UserRef,
 }
 
 impl RemoveFriendshipRequest {
-    pub fn new(user_a: Uuid, user_b: Uuid) -> Self {
-        Self { user_a, user_b }
+    pub fn new(user_a: impl Userlike, user_b: impl Userlike) -> Self {
+        Self {
+            user_a: UserRef::new(user_a.get_uuid()),
+            user_b: UserRef::new(user_b.get_uuid()),
+        }
     }
 
     pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
@@ -158,8 +167,8 @@ impl RemoveFriendshipRequest {
                     WHERE user_id = $1
                     AND friend_id = $2
             "#,
-            self.user_a,
-            self.user_b,
+            self.user_a.get_uuid(),
+            self.user_b.get_uuid(),
         )
         .execute(&mut t)
         .await?;
@@ -171,8 +180,8 @@ impl RemoveFriendshipRequest {
                     WHERE friend_id = $1
                     AND user_id = $2
             "#,
-            self.user_a,
-            self.user_b,
+            self.user_a.get_uuid(),
+            self.user_b.get_uuid(),
         )
         .execute(&mut t)
         .await?;
@@ -185,12 +194,14 @@ impl RemoveFriendshipRequest {
 
 #[derive(Copy, Clone)]
 pub struct GetFriendsOfUserRequest {
-    pub user_id: Uuid,
+    pub user: UserRef,
 }
 
 impl GetFriendsOfUserRequest {
-    pub fn new(user_id: Uuid) -> Self {
-        Self { user_id }
+    pub fn new(user: impl Userlike) -> Self {
+        Self {
+            user: UserRef::new(user.get_uuid()),
+        }
     }
 
     pub fn stream<'a>(self, conn: &'a PgPool) -> impl Stream<Item = Result<UserRef, Error>> + 'a {
@@ -199,7 +210,7 @@ impl GetFriendsOfUserRequest {
             r#"
                 SELECT friend_id FROM friendships WHERE user_id = $1
             "#,
-            self.user_id,
+            self.user.get_uuid(),
         )
         .fetch(conn)
         .map(|record| Ok(record.map(|record| UserRef(record.friend_id))?))
