@@ -222,8 +222,9 @@ pub struct UserNewFriendships {
 }
 
 impl UserNewFriendships {
-    pub async fn new(user_id: Uuid, client: &Client) -> Result<Self, Error> {
+    pub async fn new(user: impl Userlike, client: &Client) -> Result<Self, Error> {
         let friendships = NewFriendships::new(client).await?;
+        let user_id = user.get_uuid();
 
         let inner = friendships.filter_map(move |friendship| async move {
             match friendship {

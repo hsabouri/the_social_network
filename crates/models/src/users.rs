@@ -12,12 +12,12 @@ use crate::{
     repository::{
         messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
         users::*,
-    },
+    }, realtime::PublishFriendship,
 };
 
 /// Contains all functions that only requires the Uuid of the User.
 #[async_trait]
-pub trait Userlike {
+pub trait Userlike: Sized {
     fn get_uuid(&self) -> Uuid;
 
     fn delete(&self) -> DeleteUserRequest {
@@ -66,6 +66,10 @@ pub trait Userlike {
             .collect();
 
         Ok(Box::pin(MergeSortedTryStreams::new(friends_streams)))
+    }
+
+    fn realtime_friend_with(self, other: impl Userlike) -> PublishFriendship {
+        PublishFriendship::new(self, other)
     }
 }
 

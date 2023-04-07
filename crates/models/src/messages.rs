@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[async_trait]
-pub trait Messagelike {
+pub trait Messagelike: Sized {
     fn get_uuid(&self) -> Uuid;
 
     fn seen_by(&self, user: impl Userlike) -> AddSeenTagRequest {
@@ -19,6 +19,10 @@ pub trait Messagelike {
 
     fn unseen_by(&self, user: impl Userlike) -> RemoveSeenTagRequest {
         RemoveSeenTagRequest::new(self.get_uuid(), user.get_uuid())
+    }
+
+    fn realtime_seen_by(self, user: impl Userlike) -> PublishSeenMessage {
+        PublishSeenMessage::new(self, user)
     }
 }
 
@@ -79,10 +83,6 @@ impl Message {
 
     pub fn realtime_publish(self) -> PublishMessage {
         PublishMessage::new(self)
-    }
-
-    pub fn realtime_seen_by(self, user: impl Userlike) -> PublishSeenMessage {
-        PublishSeenMessage::new(self, user)
     }
 }
 

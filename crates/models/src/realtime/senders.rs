@@ -48,3 +48,26 @@ impl PublishSeenMessage {
             .await?)
     }
 }
+
+pub struct PublishFriendship {
+    pub user: UserRef,
+    pub friend: UserRef,
+}
+
+impl PublishFriendship {
+    pub fn new(user: impl Userlike, friend: impl Userlike) -> Self {
+        Self {
+            user: UserRef::new(user.get_uuid()),
+            friend: UserRef::new(friend.get_uuid()),
+        }
+    }
+
+    pub async fn publish(self, client: &Client) -> Result<(), Error> {
+        Ok(client
+            .publish(
+                CHANNEL_FRIENDSHIP.into(),
+                encode_proto_friendship(self.user, self.friend),
+            )
+            .await?)
+    }
+}
