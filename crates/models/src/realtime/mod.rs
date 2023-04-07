@@ -206,6 +206,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
+        // TODO: Put this part in a `stream-helper`
         let keep_stream = if let Some(users_stream) = self.users_stream.as_mut() {
             // Get potential new user from stream
             match users_stream.poll_next_unpin(cx) {
@@ -287,10 +288,89 @@ impl Stream for UserNewFriendships {
     }
 }
 
-/// Builder for a stream of newly seen messages from a list of a user.
-pub struct UsersSeenMessages {
-    pub users: HashSet<Uuid>,
+/// Takes a stream `T` of `I::Userlike` and outputs a stream of the newly seen messages from these users.
+///
+/// If stream `T` is closed/finished, output stream will continue with newly seen message of all users returned by stream
+/// `T` before it closed.
+pub struct UsersSeenMessages<T, I>
+where
+    T: Stream<Item = I>,
+    I: Userlike,
+{
+    users_stream: Option<T>,
+    subscription: SeenMessages,
+    users: HashSet<Uuid>,
 }
+
+impl<T, I> UsersSeenMessages<T, I>
+where
+    T: Stream<Item = I>,
+    I: Userlike,
+{
+    pub async fn new(users: T, client: Client) -> Result<Self, Error> {
+        Ok(Self {
+            users_stream: Some(users),
+            subscription: SeenMessages::new(client).await?,
+            users: HashSet::new(),
+        })
+    }
+}
+
+impl<T, I> Stream for UsersSeenMessages<T, I>
+where
+    T: Stream<Item = I> + Unpin,
+    I: Userlike,
+{
+    type Item = Result<(UserRef, MessageRef), Error>;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        let keep_stream = if let Some(users_stream) = self.users_stream.as_mut() {
+            // Get potential new user from stream
+            match users_stream.poll_next_unpin(cx) {
+                Poll::Ready(output) => match output {
+                    Some(new_user) => {
+                        self.users.insert(new_user.get_uuid());
+                        true
+                    }
+                    None => false,
+                },
+                Poll::Pending => true,
+            }
+        } else {
+            false
+        };
+
+        // If user stream is finished, forget it.
+        if !keep_stream {
+            self.users_stream = None;
+        }
+
+        // Get potential new message from subscribtion
+        match self.subscription.poll_next_unpin(cx) {
+            Poll::Ready(output) => match output {
+                Some(message) => {
+                    match message {
+                        Ok((user, message)) => {
+                            // Filtering with users in the list
+                            if self.users.contains(&user.get_uuid()) {
+                                Poll::Ready(Some(Ok((user, message))))
+                            } else {
+                                Poll::Pending
+                            }
+                        }
+                        err => Poll::Ready(Some(err)),
+                    }
+                }
+                None => Poll::Ready(None),
+            },
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
 
 #[cfg(test)]
 #[tokio::test]
@@ -329,7 +409,22 @@ async fn message_broadcast_test() -> Result<(), Box<dyn std::error::Error>> {
         println!("RECEIVER_1: message: \"{:#?}\"", sub.next().await);
     });
 
-    let _ = tokio::join!(receiver_1, sender);
+    let receiver_2 = tokio::spawn(async move {
+        let receiver = ConnectOptions::new()
+            .connect("nats://ruser:password@127.0.0.1:4222")
+            .await
+            .unwrap();
+        println!(
+            "RECEIVER_2: Connected to NATS: {}",
+            receiver.connection_state()
+        );
+
+        let mut sub = receiver.subscribe("notification".into()).await.unwrap();
+
+        println!("RECEIVER_2: message: \"{:#?}\"", sub.next().await);
+    });
+
+    let _ = tokio::join!(receiver_1, receiver_2, sender);
 
     Ok(())
 }
