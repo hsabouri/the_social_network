@@ -3,7 +3,7 @@ use futures::{stream::StreamExt, Stream};
 use uuid::Uuid;
 use sqlx::PgPool;
 
-use crate::users::{User, UserRef};
+use crate::users::{User, UserRef, Userlike};
 
 pub struct GetUser {
     pub user_id: Uuid,
@@ -197,12 +197,12 @@ impl GetFriendsOfUserRequest {
         sqlx::query!(
             // language=PostgreSQL
             r#"
-                SELECT user_id FROM friendships WHERE user_id = $1
+                SELECT friend_id FROM friendships WHERE user_id = $1
             "#,
             self.user_id,
         )
         .fetch(conn)
-        .map(|record| Ok(record.map(|record| UserRef(record.user_id))?))
+        .map(|record| Ok(record.map(|record| UserRef(record.friend_id))?))
     }
 }
 

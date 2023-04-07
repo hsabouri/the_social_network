@@ -4,6 +4,7 @@ use chrono::NaiveDateTime;
 use uuid::Uuid;
 
 use crate::{
+    realtime::{PublishMessage, PublishSeenMessage},
     repository::messages::{AddSeenTagRequest, InsertMessageRequest, RemoveSeenTagRequest},
     users::Userlike,
 };
@@ -74,6 +75,39 @@ impl Message {
         InsertMessageRequest::new(self.user_id, self.content.clone())
             .with_datetime(self.date)
             .with_uuid(self.id)
+    }
+
+    pub fn realtime_publish(self) -> PublishMessage {
+        PublishMessage::new(self)
+    }
+
+    pub fn realtime_seen_by(self, user: impl Userlike) -> PublishSeenMessage {
+        PublishSeenMessage::new(self, user)
+    }
+}
+
+impl TryFrom<proto::Message> for Message {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::Message) -> Result<Self, Self::Error> {
+        Ok(Message {
+            id: Uuid::try_parse(value.message_id.as_str())?,
+            user_id: Uuid::try_parse(value.user_id.as_str())?,
+            date: NaiveDateTime::from_timestamp_opt(value.timestamp as i64, 0).unwrap(),
+            content: value.content,
+        })
+    }
+}
+
+impl Into<proto::Message> for Message {
+    fn into(self) -> proto::Message {
+        proto::Message {
+            message_id: self.id.to_string(),
+            user_id: self.user_id.to_string(),
+            timestamp: self.date.timestamp() as u64,
+            content: self.content.clone(),
+            read: false,
+        }
     }
 }
 

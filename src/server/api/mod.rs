@@ -1,18 +1,15 @@
 use anyhow::Error;
 use config::ServerConfig;
-use dashmap::DashMap;
-use futures::{Stream, TryStreamExt};
-use models::messages::{Message, MessageRef, Messagelike};
-use models::users::{User, UserRef, Userlike};
+use futures::{Stream, StreamExt, TryStreamExt, TryFutureExt};
+use models::realtime;
 use std::pin::Pin;
-use std::sync::Arc;
-use tokio::sync::broadcast;
-use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 use proto::social_network_server::SocialNetwork;
 use proto::*;
+
+use models::messages::{Message, MessageRef, Messagelike};
+use models::users::{User, UserRef, Userlike};
 
 use crate::connections::ServerConnections;
 
@@ -22,7 +19,6 @@ use helpers::*;
 
 #[derive(Clone)]
 pub struct ServerState {
-    notifications: Arc<DashMap<Uuid, broadcast::Sender<Message>>>,
     connections: ServerConnections,
     _config: ServerConfig,
 }
@@ -30,32 +26,31 @@ pub struct ServerState {
 impl ServerState {
     pub async fn new(config: ServerConfig) -> Result<Self, Error> {
         Ok(Self {
-            notifications: Arc::new(DashMap::new()),
             connections: ServerConnections::new(&config).await?,
             _config: config,
         })
-    }
-
-    async fn broadcast_message(&self, message: Message) -> Result<(), Error> {
-        let user_id = &message.user_id;
-        // Do not send message to OP
-        let subscribed_users = self
-            .notifications
-            .iter()
-            .filter(|user| user.key() != user_id);
-
-        for sub_user in subscribed_users {
-            // Push and forget
-            println!("Broadcasting message to {}", sub_user.key());
-            let _ = sub_user.value().send(message.clone());
-        }
-
-        Ok(())
     }
 }
 
 #[tonic::async_trait]
 impl SocialNetwork for ServerState {
+    async fn get_user_by_name(
+        &self,
+        request: Request<UserByNameRequest>,
+    ) -> Result<Response<UserResponse>, Status> {
+        let request = request.into_inner();
+
+        let user = User::get_by_name(request.name)
+            .execute(self.connections.get_pg())
+            .await
+            .map_err(Status::error_internal)?;
+
+        Ok(Response::new(UserResponse {
+            name: user.name,
+            user_id: user.id.to_string(),
+        }))
+    }
+
     async fn add_friend(
         &self,
         request: Request<FriendRequest>,
@@ -94,6 +89,76 @@ impl SocialNetwork for ServerState {
             .map_err(|e| Status::internal(e.to_string()))?;
 
         Ok(Response::new(FriendResponse { success: true }))
+    }
+
+    async fn post_message(
+        &self,
+        request: Request<PostMessageRequest>,
+    ) -> Result<Response<MessageStatusResponse>, Status> {
+        let request = request.into_inner();
+        let preview = request
+            .content
+            .chars()
+            .take(15)
+            .chain("[…]".chars())
+            .collect::<String>();
+
+        println!(
+            r#"User {} posted a new message: "{}""#,
+            request.user_id, preview
+        );
+
+        let user =
+            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
+
+        let message = Message::new(user, request.content);
+
+        let realtime = message
+            .clone()
+            .realtime_publish()
+            .publish(self.connections.get_nats());
+
+        let persistance = message
+            .insert()
+            .execute(self.connections.get_scylla())
+            .map_err(Status::error_internal);
+
+        // Execute both futures at the same time for efficiency
+        // Ignore errors related to realtime publishing.
+        let (_rt, persistance) = futures::join!(realtime, persistance);
+        let _uuid = persistance?;
+
+        let response = MessageStatusResponse { success: true };
+
+        Ok(Response::new(response))
+    }
+
+    type TimelineStream = Pin<Box<dyn Stream<Item = Result<TimelineResponse, Status>> + Send>>;
+
+    async fn timeline(
+        &self,
+        request: Request<TimelineRequest>,
+    ) -> Result<Response<Self::TimelineStream>, Status> {
+        let timeline_request = request.into_inner();
+        let user = UserRef::from_str_uuid(timeline_request.user_id)
+            .map_err(Status::error_invalid_argument)?;
+
+        let stream = user
+            .get_timeline(self.connections.get_pg(), &self.connections.get_scylla())
+            .await
+            .map_err(Status::error_internal)?
+            .map_ok(|message| TimelineResponse {
+                messages: vec![proto::Message {
+                    user_id: message.user_id.to_string(),
+                    message_id: message.id.to_string(),
+                    timestamp: message.date.timestamp() as u64,
+                    content: message.content,
+                    read: false,
+                }],
+            })
+            .map_err(Status::error_internal);
+
+        Ok(Response::new(Box::pin(stream)))
     }
 
     async fn tag_read_message(
@@ -138,92 +203,6 @@ impl SocialNetwork for ServerState {
         Ok(Response::new(MessageStatusResponse { success: true }))
     }
 
-    async fn get_user_by_name(
-        &self,
-        request: Request<UserByNameRequest>,
-    ) -> Result<Response<UserResponse>, Status> {
-        let request = request.into_inner();
-
-        let user = User::get_by_name(request.name)
-            .execute(self.connections.get_pg())
-            .await
-            .map_err(Status::error_internal)?;
-
-        Ok(Response::new(UserResponse {
-            name: user.name,
-            user_id: user.id.to_string(),
-        }))
-    }
-
-    async fn post_message(
-        &self,
-        request: Request<PostMessageRequest>,
-    ) -> Result<Response<MessageStatusResponse>, Status> {
-        let request = request.into_inner();
-        let preview = request
-            .content
-            .chars()
-            .take(15)
-            .chain("[…]".chars())
-            .collect::<String>();
-
-        println!(
-            r#"User {} posted a new message: "{}""#,
-            request.user_id, preview
-        );
-
-        let user =
-            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
-
-        let message = Message::new(user, request.content);
-
-        // Stream to other connected users.
-        let f = self.broadcast_message(message.clone()).await;
-        match f {
-            Err(e) => println!("Error while broadcasing message: {e}"),
-            _ => (),
-        };
-
-        // 
-        let _ = message
-            .insert()
-            .execute(self.connections.get_scylla())
-            .await
-            .map_err(Status::error_internal);
-
-        let response = MessageStatusResponse { success: true };
-
-        Ok(Response::new(response))
-    }
-
-    type TimelineStream = Pin<Box<dyn Stream<Item = Result<TimelineResponse, Status>> + Send>>;
-
-    async fn timeline(
-        &self,
-        request: Request<TimelineRequest>,
-    ) -> Result<Response<Self::TimelineStream>, Status> {
-        let timeline_request = request.into_inner();
-        let user = UserRef::from_str_uuid(timeline_request.user_id)
-            .map_err(Status::error_invalid_argument)?;
-
-        let stream = user
-            .get_timeline(self.connections.get_pg(), &self.connections.get_scylla())
-            .await
-            .map_err(Status::error_internal)?
-            .map_ok(|message| TimelineResponse {
-                messages: vec![proto::Message {
-                    user_id: message.user_id.to_string(),
-                    message_id: message.id.to_string(),
-                    timestamp: message.date.timestamp() as u64,
-                    content: message.content,
-                    read: false,
-                }],
-            })
-            .map_err(Status::error_internal);
-
-        Ok(Response::new(Box::pin(stream)))
-    }
-
     type RealTimeNotificationsStream =
         Pin<Box<dyn Stream<Item = Result<NotificationsResponse, Status>> + Send>>;
 
@@ -232,32 +211,22 @@ impl SocialNetwork for ServerState {
         request: Request<NotificationsRequest>,
     ) -> Result<Response<Self::RealTimeNotificationsStream>, Status> {
         let request = request.into_inner();
-        let user_id =
-            Uuid::parse_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
+        let user =
+            UserRef::from_str_uuid(&request.user_id).map_err(Status::error_invalid_argument)?;
+        let friends = user
+            .get_friends()
+            .stream(self.connections.get_pg())
+            .filter_map(|friend| async { friend.ok() });
 
-        self.notifications
-            .entry(user_id.clone())
-            .or_insert_with(|| {
-                // Receiver will be created from sender.
-                // Multiple receiver can exist for on Sender (user is connected on multiple sessions)
-                let (tx, _) = broadcast::channel(100);
-                tx
-            });
-
-        let rx = self.notifications.get(&user_id).unwrap().subscribe();
-        let stream = BroadcastStream::new(rx)
-            .map_ok(|message| NotificationsResponse {
-                message: Some(proto::Message {
-                    user_id: message.user_id.to_string(),
-                    message_id: message.id.to_string(),
-                    timestamp: message.date.timestamp() as u64,
-                    content: message.content,
-                    read: false,
-                }),
-            })
-            .map_err(Status::error_internal);
-
-        println!("User {user_id} connected to live notifications.");
+        // FIXME: Errors in the friends stream are discarded.
+        let stream =
+            realtime::UsersNewMessages::new(Box::pin(friends), self.connections.get_nats())
+                .await
+                .map_err(Status::error_internal)?
+                .map_ok(|message| NotificationsResponse {
+                    message: Some(message.into()),
+                })
+                .map_err(Status::error_internal);
 
         Ok(Response::new(Box::pin(stream)))
     }
