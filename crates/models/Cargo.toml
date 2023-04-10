@@ -14,7 +14,6 @@ futures = "0.3"
 anyhow = "1.0"
 async-trait = "0.1.68"
 chrono = "0.4"
-stream_helpers = { path = "../stream_helpers" }
 
 # Realtime
 proto = { path = "../proto" }

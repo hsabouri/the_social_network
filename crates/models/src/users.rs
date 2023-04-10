@@ -1,18 +1,20 @@
 use anyhow::Error;
 use async_trait::async_trait;
-use futures::stream::{BoxStream, StreamExt};
+use futures::{
+    stream::{select_all, StreamExt},
+    Stream,
+};
 use scylla::Session;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use stream_helpers::MergeSortedTryStreams;
-
 use crate::{
     messages::Message,
+    realtime::PublishFriendship,
     repository::{
         messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
         users::*,
-    }, realtime::PublishFriendship,
+    },
 };
 
 /// Contains all functions that only requires the Uuid of the User.
@@ -48,26 +50,6 @@ pub trait Userlike: Sized {
         InsertUserRequest::new(name)
     }
 
-    async fn get_timeline<'a>(
-        &self,
-        conn: &'a PgPool,
-        session: &'a Session,
-    ) -> Result<BoxStream<'a, Result<Message, Error>>, Error> {
-        let friends = self
-            .get_friends()
-            .stream(conn)
-            .collect::<Vec<Result<UserRef, Error>>>()
-            .await;
-
-        let friends_streams: Vec<_> = friends
-            .into_iter()
-            .filter_map(|f| f.ok())
-            .map(|f| Box::pin(f.get_messages().stream(&*session)))
-            .collect();
-
-        Ok(Box::pin(MergeSortedTryStreams::new(friends_streams)))
-    }
-
     fn realtime_friend_with(self, other: impl Userlike) -> PublishFriendship {
         PublishFriendship::new(self, other)
     }
@@ -90,6 +72,12 @@ impl Userlike for UserRef {
     }
 }
 
+impl Userlike for &UserRef {
+    fn get_uuid(&self) -> Uuid {
+        self.0
+    }
+}
+
 impl UserRef {
     pub fn from_str_uuid(user_id: impl AsRef<str>) -> Result<Self, Error> {
         let uuid = Uuid::try_parse(user_id.as_ref())
@@ -106,6 +94,14 @@ impl UserRef {
     pub async fn get_full_user(self, conn: &PgPool) -> Result<User, Error> {
         GetUser::new(self.0).execute(conn).await
     }
+
+    pub async fn get_timeline<'a>(
+        self,
+        conn: &'a PgPool,
+        session: &'a Session,
+    ) -> impl Stream<Item = Result<Message, Error>> + 'a {
+        get_timeline(self, conn, session).await
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -118,10 +114,46 @@ impl User {
     pub fn get_by_name(name: String) -> GetUserByNameRequest {
         GetUserByNameRequest::new(name)
     }
+
+    pub async fn get_timeline<'a>(
+        &'a self,
+        conn: &'a PgPool,
+        session: &'a Session,
+    ) -> impl Stream<Item = Result<Message, Error>> + 'a {
+        get_timeline(self, conn, session).await
+    }
 }
 
 impl Userlike for User {
     fn get_uuid(&self) -> Uuid {
         self.id
     }
+}
+
+impl Userlike for &User {
+    fn get_uuid(&self) -> Uuid {
+        self.id
+    }
+}
+
+async fn get_timeline<'a>(
+    user: impl Userlike + 'a,
+    conn: &'a PgPool,
+    session: &'a Session,
+) -> impl Stream<Item = Result<Message, Error>> + 'a {
+    let friends = user
+        .get_friends()
+        .stream(conn)
+        .collect::<Vec<Result<UserRef, Error>>>()
+        .await;
+
+    let friends_streams: Vec<_> = friends
+        .into_iter()
+        .filter_map(|f| f.ok())
+        .map(|f| Box::pin(f.get_messages().stream(session)))
+        .collect();
+
+    let stream = select_all(friends_streams);
+
+    stream
 }

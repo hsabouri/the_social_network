@@ -154,7 +154,6 @@ impl SocialNetwork for ServerState {
         let stream = user
             .get_timeline(self.connections.get_pg(), &self.connections.get_scylla())
             .await
-            .map_err(Status::error_internal)?
             .map_ok(|message| TimelineResponse {
                 messages: vec![proto::Message {
                     user_id: message.user_id.to_string(),
@@ -222,27 +221,22 @@ impl SocialNetwork for ServerState {
         let user =
             UserRef::from_str_uuid(&request.user_id).map_err(Status::error_invalid_argument)?;
 
-        let friends = user
-            .get_friends()
-            .stream(self.connections.get_pg())
-            .filter_map(|friend| async { friend.ok() });
+        let friends = user.get_friends().stream(self.connections.get_pg());
 
-        let new_friends = realtime::UserNewFriendships::new(user, self.connections.get_nats())
+        let new_friends = realtime::new_friends_of_user(user, self.connections.get_nats())
             .await
-            .map_err(Status::error_internal)?
-            .filter_map(|friend| async { friend.ok() });
+            .map_err(Status::error_internal)?;
 
         let friends = friends.chain(new_friends);
 
         // FIXME: Errors in the friends stream are discarded.
-        let stream =
-            realtime::UsersNewMessages::new(Box::pin(friends), self.connections.get_nats())
-                .await
-                .map_err(Status::error_internal)?
-                .map_ok(|message| NotificationsResponse {
-                    message: Some(message.into()),
-                })
-                .map_err(Status::error_internal);
+        let stream = realtime::new_messages_from_users(friends, self.connections.get_nats())
+            .await
+            .map_err(Status::error_internal)?
+            .map_ok(|message| NotificationsResponse {
+                message: Some(message.into()),
+            })
+            .map_err(Status::error_internal);
 
         Ok(Response::new(Box::pin(stream)))
     }
