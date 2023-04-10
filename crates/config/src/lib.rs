@@ -27,9 +27,14 @@ where
     })
 }
 
-pub type ScyllaHost = String;
-pub type PgHost = String;
-pub type NatsHost = String;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScyllaHost(String);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PgHost(String);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NatsHost(String);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScyllaDbConfig {
@@ -39,8 +44,10 @@ pub struct ScyllaDbConfig {
 
 impl ScyllaDbConfig {
     pub fn into_session_builder(&self) -> scylla::SessionBuilder {
+        let known_nodes: Vec<&String> = self.hostnames.iter().map(|n| &n.0).collect();
+
         scylla::SessionBuilder::new()
-            .known_nodes(self.hostnames.as_slice())
+            .known_nodes(known_nodes.as_slice())
             .use_keyspace(&self.keyspace, false)
     }
 }
@@ -66,7 +73,7 @@ pub struct PostgreSqlConfig {
 impl PostgreSqlConfig {
     pub fn into_connect_options(&self) -> PgConnectOptions {
         PgConnectOptions::new()
-            .host(self.host.as_str())
+            .host(self.host.0.as_str())
             .port(self.port)
             .username(&self.username)
             .password(&self.password)
@@ -100,7 +107,7 @@ pub struct NatsConnectOptionsWrapper {
 
 impl NatsConnectOptionsWrapper {
     pub async fn connect(self) -> Result<async_nats::Client, async_nats::ConnectError> {
-        self.options.connect(self.host).await
+        self.options.connect(self.host.0).await
     }
 }
 
