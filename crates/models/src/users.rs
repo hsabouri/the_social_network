@@ -1,4 +1,5 @@
 use anyhow::Error;
+use async_nats::Client;
 use async_trait::async_trait;
 use futures::{
     stream::{select_all, StreamExt},
@@ -10,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     messages::Message,
-    realtime::PublishFriendship,
+    realtime::{self, PublishFriendship},
     repository::{
         messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
         users::*,
@@ -91,7 +92,7 @@ impl UserRef {
     }
 
     /// Retrieves full user information from DB and returns a `User`.
-    pub async fn get_full_user(self, conn: &PgPool) -> Result<User, Error> {
+    pub async fn upgrade(self, conn: &PgPool) -> Result<User, Error> {
         GetUser::new(self.0).execute(conn).await
     }
 
@@ -102,6 +103,20 @@ impl UserRef {
     ) -> impl Stream<Item = Result<Message, Error>> + 'a {
         get_timeline(self, conn, session).await
     }
+
+    pub fn real_time_timeline<'a>(
+        self,
+        pg: &'a PgPool,
+        nats: &'a Client,
+    ) -> impl Stream<Item = Result<Message, Error>> + 'a {
+        let friends = self.get_friends().stream(pg);
+        let new_friends = realtime::new_friends_of_user(self, nats);
+        let friends = friends.chain(new_friends);
+
+        let stream = realtime::new_messages_from_users(friends, nats);
+
+        stream
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +126,10 @@ pub struct User {
 }
 
 impl User {
+    pub fn downgrade(&self) -> UserRef {
+        UserRef::new(self.id)
+    }
+
     pub fn get_by_name(name: String) -> GetUserByNameRequest {
         GetUserByNameRequest::new(name)
     }
@@ -121,6 +140,14 @@ impl User {
         session: &'a Session,
     ) -> impl Stream<Item = Result<Message, Error>> + 'a {
         get_timeline(self, conn, session).await
+    }
+
+    pub fn real_time_timeline<'a>(
+        &'a self,
+        pg: &'a PgPool,
+        nats: &'a Client,
+    ) -> impl Stream<Item = Result<Message, Error>> + 'a {
+        self.downgrade().real_time_timeline(pg, nats)
     }
 }
 

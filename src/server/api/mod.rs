@@ -1,14 +1,13 @@
 use anyhow::Error;
 use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt};
-use models::realtime;
 use std::pin::Pin;
 use tonic::{Request, Response, Status};
 
-use proto::social_network_server::SocialNetwork;
-use proto::*;
 use config::ServerConfig;
 use models::messages::{Message, MessageRef, Messagelike};
 use models::users::{User, UserRef, Userlike};
+use proto::social_network_server::SocialNetwork;
+use proto::*;
 use task_manager::TaskManager;
 
 use crate::connections::ServerConnections;
@@ -73,10 +72,12 @@ impl SocialNetwork for ServerState {
             .execute(self.connections.get_pg())
             .map_err(|e| Status::internal(e.to_string()));
 
-        self.task_manager.spawn_await_result(async move {
-            let (_rt, persistance) = futures::join!(realtime, persistence);
-            persistance
-        }).await?;
+        self.task_manager
+            .spawn_await_result(async move {
+                let (_rt, persistance) = futures::join!(realtime, persistence);
+                persistance
+            })
+            .await?;
 
         Ok(Response::new(FriendResponse { success: true }))
     }
@@ -134,10 +135,12 @@ impl SocialNetwork for ServerState {
             .execute(self.connections.get_scylla())
             .map_err(Status::error_internal);
 
-        self.task_manager.spawn_await_result(async move {
-            let (_rt, persistance) = futures::join!(realtime, persistence);
-            persistance
-        }).await?;
+        self.task_manager
+            .spawn_await_result(async move {
+                let (_rt, persistance) = futures::join!(realtime, persistence);
+                persistance
+            })
+            .await?;
 
         let response = MessageStatusResponse { success: true };
 
@@ -226,18 +229,10 @@ impl SocialNetwork for ServerState {
         let user =
             UserRef::from_str_uuid(&request.user_id).map_err(Status::error_invalid_argument)?;
 
-        let friends = user.get_friends().stream(self.connections.get_pg());
-
-        let new_friends = realtime::new_friends_of_user(user, self.connections.get_nats())
-            .await
-            .map_err(Status::error_internal)?;
-
-        let friends = friends.chain(new_friends);
-
         // FIXME: Errors in the friends stream are discarded.
-        let stream = realtime::new_messages_from_users(friends, self.connections.get_nats())
-            .await
-            .map_err(Status::error_internal)?
+        let stream = user
+            .real_time_timeline(self.connections.get_pg(), self.connections.get_nats())
+            .map_err(Status::error_internal)
             .map_ok(|message| NotificationsResponse {
                 message: Some(message.into()),
             })
