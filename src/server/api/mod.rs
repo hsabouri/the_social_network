@@ -75,9 +75,7 @@ impl SocialNetwork for ServerState {
 
         self.task_manager.spawn_await_result(async move {
             let (_rt, persistance) = futures::join!(realtime, persistence);
-            let _uuid = persistance?;
-
-            Result::<(), Status>::Ok(())
+            persistance
         }).await?;
 
         Ok(Response::new(FriendResponse { success: true }))
@@ -138,9 +136,7 @@ impl SocialNetwork for ServerState {
 
         self.task_manager.spawn_await_result(async move {
             let (_rt, persistance) = futures::join!(realtime, persistence);
-            let _uuid = persistance?;
-
-            Result::<(), Status>::Ok(())
+            persistance
         }).await?;
 
         let response = MessageStatusResponse { success: true };
