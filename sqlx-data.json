@@ -1,0 +1,153 @@
+{
+  "db": "PostgreSQL",
+  "5371b27e1396d7d463404626305d81b8bff107d4bf127387b9c35a2bf65575b1": {
+    "describe": {
+      "columns": [
+        {
+          "name": "user_id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\n                SELECT user_id FROM users WHERE name = $1\n            "
+  },
+  "7091c90efe52284c3a6a20aeeda539edee04a80c297dac2d8819820cce2ad4ff": {
+    "describe": {
+      "columns": [
+        {
+          "name": "friend_id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT friend_id FROM friendships WHERE user_id = $1\n            "
+  },
+  "7c7da3b8d8977bdfdcb034c37d0543a818863cca0699596d9a602d5b1e7dc4f9": {
+    "describe": {
+      "columns": [
+        {
+          "name": "user_id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Varchar"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO users (name)\n                    values ($1)\n                RETURNING user_id, name\n            "
+  },
+  "b4ba657d6bb0472c8ef322b21a5bd92c6112074208ad4ddfb5eb6854bb3d3068": {
+    "describe": {
+      "columns": [
+        {
+          "name": "name",
+          "ordinal": 0,
+          "type_info": "Varchar"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                SELECT name FROM users WHERE user_id = $1\n            "
+  },
+  "b82caaff591653e183d700e8f130cedbede0b069d57af9f66155a1e3c5362649": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO friendships (user_id, friend_id)\n                    VALUES ($2, $1);\n            "
+  },
+  "c434616a82d0d9a77bb800a639ab0fa1ed1e20ec907d3ef42fab52d178105a7c": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                DELETE FROM friendships\n                    WHERE user_id = $1\n                    AND friend_id = $2\n            "
+  },
+  "c6f0d0c6f836e5b881b069b5dfb7978d26e8853b10d74c0f19ead66eb0ed5386": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                INSERT INTO friendships (user_id, friend_id)\n                    VALUES ($1, $2);\n            "
+  },
+  "de1c5fa126160425c96190bda2d3ba7527cce43d448127c715c2e809757d588a": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                DELETE FROM friendships\n                    WHERE friend_id = $1\n                    AND user_id = $2\n            "
+  },
+  "de744f0e1b476aa88a5521288192277cbc11b3cfe6b41c9d75eee865dc9506e6": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n                DELETE FROM users WHERE user_id = $1\n            "
+  }
+}
