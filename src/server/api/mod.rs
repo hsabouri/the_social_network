@@ -1,5 +1,4 @@
 use anyhow::Error;
-use config::ServerConfig;
 use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt};
 use models::realtime;
 use std::pin::Pin;
@@ -7,9 +6,10 @@ use tonic::{Request, Response, Status};
 
 use proto::social_network_server::SocialNetwork;
 use proto::*;
-
+use config::ServerConfig;
 use models::messages::{Message, MessageRef, Messagelike};
 use models::users::{User, UserRef, Userlike};
+use task_manager::TaskManager;
 
 use crate::connections::ServerConnections;
 
@@ -20,6 +20,7 @@ use helpers::*;
 #[derive(Clone)]
 pub struct ServerState {
     connections: ServerConnections,
+    task_manager: TaskManager,
     _config: ServerConfig,
 }
 
@@ -27,6 +28,7 @@ impl ServerState {
     pub async fn new(config: ServerConfig) -> Result<Self, Error> {
         Ok(Self {
             connections: ServerConnections::new(&config).await?,
+            task_manager: TaskManager::new(),
             _config: config,
         })
     }
@@ -71,10 +73,12 @@ impl SocialNetwork for ServerState {
             .execute(self.connections.get_pg())
             .map_err(|e| Status::internal(e.to_string()));
 
-        // Execute both futures at the same time for efficiency
-        // Ignore errors related to realtime publishing.
-        let (_rt, persistance) = futures::join!(realtime, persistence);
-        let _uuid = persistance?;
+        self.task_manager.spawn_await_result(async move {
+            let (_rt, persistance) = futures::join!(realtime, persistence);
+            let _uuid = persistance?;
+
+            Result::<(), Status>::Ok(())
+        }).await?;
 
         Ok(Response::new(FriendResponse { success: true }))
     }
@@ -90,11 +94,12 @@ impl SocialNetwork for ServerState {
         let friend =
             UserRef::from_str_uuid(request.friend_id).map_err(Status::error_invalid_argument)?;
 
-        let _ = user
+        let persistence = user
             .remove_friend(friend)
             .execute(self.connections.get_pg())
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(|e| Status::internal(e.to_string()));
+
+        self.task_manager.spawn_await_result(persistence).await?;
 
         Ok(Response::new(FriendResponse { success: true }))
     }
@@ -131,10 +136,12 @@ impl SocialNetwork for ServerState {
             .execute(self.connections.get_scylla())
             .map_err(Status::error_internal);
 
-        // Execute both futures at the same time for efficiency
-        // Ignore errors related to realtime publishing.
-        let (_rt, persistance) = futures::join!(realtime, persistence);
-        let _uuid = persistance?;
+        self.task_manager.spawn_await_result(async move {
+            let (_rt, persistance) = futures::join!(realtime, persistence);
+            let _uuid = persistance?;
+
+            Result::<(), Status>::Ok(())
+        }).await?;
 
         let response = MessageStatusResponse { success: true };
 
@@ -180,11 +187,12 @@ impl SocialNetwork for ServerState {
         let message = MessageRef::from_str_uuid(request.message_id)
             .map_err(Status::error_invalid_argument)?;
 
-        let _ = message
+        let persistence = message
             .seen_by(user)
             .execute(self.connections.get_scylla())
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(|e| Status::internal(e.to_string()));
+
+        self.task_manager.spawn_await_result(persistence).await?;
 
         Ok(Response::new(MessageStatusResponse { success: true }))
     }
@@ -201,11 +209,12 @@ impl SocialNetwork for ServerState {
         let message = MessageRef::from_str_uuid(request.message_id)
             .map_err(Status::error_invalid_argument)?;
 
-        let _ = message
+        let persistence = message
             .unseen_by(user)
             .execute(self.connections.get_scylla())
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(|e| Status::internal(e.to_string()));
+
+        self.task_manager.spawn_await_result(persistence).await?;
 
         Ok(Response::new(MessageStatusResponse { success: true }))
     }
