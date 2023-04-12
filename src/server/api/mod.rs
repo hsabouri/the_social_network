@@ -1,12 +1,13 @@
 use anyhow::Error;
 use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt};
 use std::pin::Pin;
+use std::str::FromStr;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use config::ServerConfig;
-use models::messages::{Message, MessageRef, Messagelike};
+use models::messages::{Message, MessageId, MessageRef, Messagelike};
 use models::users::{User, UserRef, Userlike};
 use proto::social_network_server::SocialNetwork;
 use proto::*;
@@ -197,8 +198,10 @@ impl SocialNetwork for ServerState {
         let user =
             UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
 
-        let message = MessageRef::from_str_uuid(request.message_id)
-            .map_err(Status::error_invalid_argument)?;
+        let message = MessageRef(
+            MessageId::from_str(request.message_id.as_str())
+                .map_err(Status::error_invalid_argument)?,
+        );
 
         let connections = self.connections.clone();
 
@@ -224,8 +227,10 @@ impl SocialNetwork for ServerState {
         let user =
             UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
 
-        let message = MessageRef::from_str_uuid(request.message_id)
-            .map_err(Status::error_invalid_argument)?;
+        let message = MessageRef(
+            MessageId::from_str(request.message_id.as_str())
+                .map_err(Status::error_invalid_argument)?,
+        );
 
         let connections = self.connections.clone();
 

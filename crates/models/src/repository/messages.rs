@@ -5,7 +5,7 @@ use scylla::frame::value::{Time, Timestamp};
 use scylla::Session;
 use uuid::Uuid;
 
-use crate::messages::Message;
+use crate::messages::{Message, MessageId};
 
 use super::{timestamp_to_naive, TimeBucket};
 
@@ -15,7 +15,7 @@ use super::{timestamp_to_naive, TimeBucket};
 /// Message UUID is generated here and not by DB because it cannot be easily returned.
 #[derive(Clone, Debug)]
 pub struct InsertMessageRequest {
-    pub message_id: Option<Uuid>,
+    pub message_id: Option<MessageId>,
     pub user_id: Uuid,
     pub content: String,
     pub datetime: Option<NaiveDateTime>,
@@ -48,23 +48,25 @@ impl InsertMessageRequest {
         }
     }
 
-    pub fn with_uuid(self, message_id: Uuid) -> Self {
+    pub fn with_id(self, message_id: MessageId) -> Self {
         Self {
             message_id: Some(message_id),
             ..self
         }
     }
 
-    pub async fn execute(self, session: &Session) -> Result<Uuid, Error> {
+    pub async fn execute(self, session: &Session) -> Result<MessageId, Error> {
         let datetime = self
             .datetime
             .unwrap_or_else(|| chrono::offset::Local::now().naive_local());
-        let uuid = self.message_id.unwrap_or_else(|| Uuid::new_v4());
+        let message_id = self
+            .message_id
+            .unwrap_or_else(|| MessageId::new_now(self.user_id));
         let (timestamp, bucket_timestamp) = Self::get_timestamps(datetime);
 
         session
             .query("INSERT INTO messages (message_id, user_id, date_bucket, date, content) VALUES (?, ?, ?, ?, ?)", (
-                uuid,
+                message_id.as_tuple_i64(),
                 self.user_id,
                 bucket_timestamp,
                 timestamp,
@@ -72,7 +74,7 @@ impl InsertMessageRequest {
             ))
             .await?;
 
-        Ok(uuid)
+        Ok(message_id)
     }
 }
 
@@ -136,11 +138,11 @@ impl GetLastMessagesOfUserRequest {
                             .rows_or_empty()
                             .into_iter()
                             .map(|row| {
-                                let (message_id, date, content): (Uuid, Timestamp, String) =
+                                let (message_id, date, content): ((Uuid, i64), Timestamp, String) =
                                     row.into_typed()?;
 
                                 Result::Ok(Message {
-                                    id: message_id,
+                                    id: MessageId::from_tuple_i64(message_id),
                                     date: timestamp_to_naive(date),
                                     content,
                                     user_id,
@@ -163,11 +165,11 @@ impl GetLastMessagesOfUserRequest {
 #[derive(Clone, Copy, Debug)]
 pub struct AddSeenTagRequest {
     pub user_id: Uuid,
-    pub message_id: Uuid,
+    pub message_id: MessageId,
 }
 
 impl AddSeenTagRequest {
-    pub fn new(message_id: Uuid, user_id: Uuid) -> Self {
+    pub fn new(message_id: MessageId, user_id: Uuid) -> Self {
         Self {
             user_id,
             message_id,
@@ -179,7 +181,7 @@ impl AddSeenTagRequest {
             .query(
                 r#"INSERT INTO read_tags (user_id, message_id)
                 VALUES (?, ?)"#,
-                (self.user_id, self.message_id),
+                (self.user_id, self.message_id.as_tuple_i64()),
             )
             .await?;
 
@@ -190,11 +192,11 @@ impl AddSeenTagRequest {
 #[derive(Clone, Copy, Debug)]
 pub struct RemoveSeenTagRequest {
     pub user_id: Uuid,
-    pub message_id: Uuid,
+    pub message_id: MessageId,
 }
 
 impl RemoveSeenTagRequest {
-    pub fn new(message_id: Uuid, user_id: Uuid) -> Self {
+    pub fn new(message_id: MessageId, user_id: Uuid) -> Self {
         Self {
             user_id,
             message_id,
@@ -205,7 +207,7 @@ impl RemoveSeenTagRequest {
         let _ = session
             .query(
                 r#"DELETE FROM read_tags WHERE user_id = ? AND message_id = ?"#,
-                (self.user_id, self.message_id),
+                (self.user_id, self.message_id.as_tuple_i64()),
             )
             .await?;
 

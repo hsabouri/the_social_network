@@ -34,8 +34,8 @@ pub struct PublishSeenMessage {
 impl PublishSeenMessage {
     pub fn new(message: impl Messagelike, user: impl Userlike) -> Self {
         Self {
-            user: UserRef::new(user.get_uuid()),
-            message: MessageRef::new(message.get_uuid()),
+            user: user.downgrade(),
+            message: MessageRef::new(message.get_id()),
         }
     }
 

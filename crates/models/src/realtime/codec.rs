@@ -4,7 +4,7 @@ use uuid::Uuid;
 use prost::Message as ProstMessage;
 
 use crate::{
-    messages::{Message, MessageRef, Messagelike},
+    messages::{Message, MessageId, MessageRef, Messagelike},
     users::{UserRef, Userlike},
 };
 
@@ -33,7 +33,7 @@ pub(crate) fn decode_proto_message_tag_request(
     let tag = proto::MessageTagRequest::decode(payload)?;
 
     let user = UserRef(Uuid::try_parse(tag.user_id.as_str())?);
-    let message = MessageRef(Uuid::try_parse(tag.message_id.as_str())?);
+    let message = MessageRef(MessageId::try_parse(tag.message_id.as_str())?);
 
     Ok((user, message))
 }
@@ -50,7 +50,7 @@ pub(crate) fn encode_proto_message_tag_request(
 ) -> prost::bytes::Bytes {
     let m = proto::MessageTagRequest {
         user_id: user.get_uuid().to_string(),
-        message_id: message.get_uuid().to_string(),
+        message_id: message.get_id().to_string(),
     };
 
     m.encode_to_vec().into()

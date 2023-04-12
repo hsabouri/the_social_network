@@ -54,6 +54,10 @@ pub trait Userlike: Sized {
     fn realtime_friend_with(self, other: impl Userlike) -> PublishFriendship {
         PublishFriendship::new(self, other)
     }
+
+    fn downgrade(&self) -> UserRef {
+        UserRef::new(self.get_uuid())
+    }
 }
 
 impl Userlike for Uuid {
@@ -126,10 +130,6 @@ pub struct User {
 }
 
 impl User {
-    pub fn downgrade(&self) -> UserRef {
-        UserRef::new(self.id)
-    }
-
     pub fn get_by_name(name: String) -> GetUserByNameRequest {
         GetUserByNameRequest::new(name)
     }
