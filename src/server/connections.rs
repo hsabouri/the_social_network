@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Error;
 use async_nats::Client as NatsClient;
 use config::ServerConfig;
@@ -6,11 +8,11 @@ use scylla::Session;
 use sqlx::PgPool;
 
 static PG_POOL: OnceCell<PgPool> = OnceCell::new();
-static SCYLLA_SESSION: OnceCell<Session> = OnceCell::new();
 
 #[derive(Clone)]
 pub struct ServerConnections {
     nats_client: NatsClient,
+    scylla_session: Arc<Session>,
 }
 
 impl ServerConnections {
@@ -21,24 +23,20 @@ impl ServerConnections {
             PG_POOL.set(pg_pool).expect("PG_POOL already initialized");
         }
 
-        if SCYLLA_SESSION.get().is_none() {
-            let scylla_session = config.scylladb.into_session_builder().build().await?;
-            println!("Connected to ScyllaDB");
-            SCYLLA_SESSION
-                .set(scylla_session)
-                .expect("SCYLLA_SESSION already initialized");
-        }
+        let scylla_session = config.scylladb.into_session_builder().build().await?;
+        println!("Connected to ScyllaDB");
 
         let nats_client = config.nats.into_connect_options().connect().await?;
         println!("Connected to NATS");
 
         Ok(Self {
-            nats_client
+            nats_client,
+            scylla_session: Arc::new(scylla_session),
         })
     }
 
-    pub fn get_scylla(&self) -> &'static Session {
-        SCYLLA_SESSION.get().unwrap()
+    pub fn get_scylla(&self) -> &Session {
+        self.scylla_session.as_ref()
     }
 
     pub fn get_pg(&self) -> &'static PgPool {

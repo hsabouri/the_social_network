@@ -1,6 +1,8 @@
 use anyhow::Error;
 use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt};
 use std::pin::Pin;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use config::ServerConfig;
@@ -125,18 +127,20 @@ impl SocialNetwork for ServerState {
 
         let message = Message::new(user, request.content);
 
-        let realtime = message
-            .clone()
-            .realtime_publish()
-            .publish(self.connections.get_nats());
-
-        let persistence = message
-            .insert()
-            .execute(self.connections.get_scylla())
-            .map_err(Status::error_internal);
+        let connections = self.connections.clone();
 
         self.task_manager
             .spawn_await_result(async move {
+                let realtime = message
+                    .clone()
+                    .realtime_publish()
+                    .publish(connections.get_nats());
+
+                let persistence = message
+                    .insert()
+                    .execute(connections.get_scylla())
+                    .map_err(Status::error_internal);
+
                 let (_rt, persistance) = futures::join!(realtime, persistence);
                 persistance
             })
@@ -157,20 +161,25 @@ impl SocialNetwork for ServerState {
         let user = UserRef::from_str_uuid(timeline_request.user_id)
             .map_err(Status::error_invalid_argument)?;
 
-        let stream = user
-            .get_timeline(self.connections.get_pg(), &self.connections.get_scylla())
-            .await
-            .map_ok(|message| TimelineResponse {
-                messages: vec![proto::Message {
-                    user_id: message.user_id.to_string(),
-                    message_id: message.id.to_string(),
-                    timestamp: message.date.timestamp() as u64,
-                    content: message.content,
-                    read: false,
-                }],
-            })
-            .map_err(Status::error_internal);
+        let connections = self.connections.clone();
 
+        let (tx, rx) = mpsc::channel(128);
+        tokio::spawn(async move {
+            let mut stream = user
+                .get_timeline(connections.get_pg(), connections.get_scylla())
+                .await
+                .map_ok(|message| TimelineResponse {
+                    messages: vec![message.into()],
+                })
+                .map_err(Status::error_internal);
+
+            while let Some(item) = stream.next().await {
+                let _ = tx.send(item).await;
+            }
+            // Client disconnected
+        });
+
+        let stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(stream)))
     }
 
@@ -186,12 +195,17 @@ impl SocialNetwork for ServerState {
         let message = MessageRef::from_str_uuid(request.message_id)
             .map_err(Status::error_invalid_argument)?;
 
-        let persistence = message
-            .seen_by(user)
-            .execute(self.connections.get_scylla())
-            .map_err(|e| Status::internal(e.to_string()));
+        let connections = self.connections.clone();
 
-        self.task_manager.spawn_await_result(persistence).await?;
+        self.task_manager
+            .spawn_await_result(async move {
+                message
+                    .seen_by(user)
+                    .execute(connections.get_scylla())
+                    .map_err(|e| Status::internal(e.to_string()))
+                    .await
+            })
+            .await?;
 
         Ok(Response::new(MessageStatusResponse { success: true }))
     }
@@ -208,12 +222,17 @@ impl SocialNetwork for ServerState {
         let message = MessageRef::from_str_uuid(request.message_id)
             .map_err(Status::error_invalid_argument)?;
 
-        let persistence = message
-            .unseen_by(user)
-            .execute(self.connections.get_scylla())
-            .map_err(|e| Status::internal(e.to_string()));
+        let connections = self.connections.clone();
 
-        self.task_manager.spawn_await_result(persistence).await?;
+        self.task_manager
+            .spawn_await_result(async move {
+                message
+                    .unseen_by(user)
+                    .execute(connections.get_scylla())
+                    .map_err(|e| Status::internal(e.to_string()))
+                    .await
+            })
+            .await?;
 
         Ok(Response::new(MessageStatusResponse { success: true }))
     }

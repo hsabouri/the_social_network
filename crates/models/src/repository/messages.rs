@@ -118,7 +118,7 @@ impl GetLastMessagesOfUserRequest {
             )
         });
 
-        let s = bucketted_result
+        let stream = bucketted_result
             .map(move |res| {
                 res.into_stream().map(move |res| match res {
                     Ok(res) => {
@@ -146,7 +146,7 @@ impl GetLastMessagesOfUserRequest {
             .flatten()
             .flatten();
 
-        s
+        stream
     }
 }
 
