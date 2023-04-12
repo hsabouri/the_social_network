@@ -65,17 +65,19 @@ impl SocialNetwork for ServerState {
         let friend =
             UserRef::from_str_uuid(request.friend_id).map_err(Status::error_invalid_argument)?;
 
-        let realtime = user
-            .realtime_friend_with(friend)
-            .publish(self.connections.get_nats());
-
-        let persistence = user
-            .friend_with(friend)
-            .execute(self.connections.get_pg())
-            .map_err(|e| Status::internal(e.to_string()));
+        let connections = self.connections.clone();
 
         self.task_manager
             .spawn_await_result(async move {
+                let realtime = user
+                    .realtime_friend_with(friend)
+                    .publish(connections.get_nats());
+
+                let persistence = user
+                    .friend_with(friend)
+                    .execute(connections.get_pg())
+                    .map_err(|e| Status::internal(e.to_string()));
+
                 let (_rt, persistance) = futures::join!(realtime, persistence);
                 persistance
             })
@@ -95,12 +97,16 @@ impl SocialNetwork for ServerState {
         let friend =
             UserRef::from_str_uuid(request.friend_id).map_err(Status::error_invalid_argument)?;
 
-        let persistence = user
-            .remove_friend(friend)
-            .execute(self.connections.get_pg())
-            .map_err(|e| Status::internal(e.to_string()));
+        let connections = self.connections.clone();
 
-        self.task_manager.spawn_await_result(persistence).await?;
+        self.task_manager
+            .spawn_await_result(async move {
+                user.remove_friend(friend)
+                    .execute(connections.get_pg())
+                    .map_err(|e| Status::internal(e.to_string()))
+                    .await
+            })
+            .await?;
 
         Ok(Response::new(FriendResponse { success: true }))
     }
@@ -248,15 +254,27 @@ impl SocialNetwork for ServerState {
         let user =
             UserRef::from_str_uuid(&request.user_id).map_err(Status::error_invalid_argument)?;
 
-        // FIXME: Errors in the friends stream are discarded.
-        let stream = user
-            .real_time_timeline(self.connections.get_pg(), self.connections.get_nats())
-            .map_err(Status::error_internal)
-            .map_ok(|message| NotificationsResponse {
-                message: Some(message.into()),
-            })
-            .map_err(Status::error_internal);
+        let connections = self.connections.clone();
 
+        let (tx, rx) = mpsc::channel(128);
+        tokio::spawn(async move {
+            let stream = user
+                .real_time_timeline(connections.get_pg(), connections.get_nats())
+                .map_err(Status::error_internal)
+                .map_ok(|message| NotificationsResponse {
+                    message: Some(message.into()),
+                });
+
+            // FIXME: Remove this Box::pin
+            let mut stream = Box::pin(stream);
+
+            while let Some(item) = stream.next().await {
+                let _ = tx.send(item).await;
+            }
+            // Client disconnected
+        });
+
+        let stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(stream)))
     }
 }

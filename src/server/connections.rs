@@ -13,15 +13,13 @@ static PG_POOL: OnceCell<PgPool> = OnceCell::new();
 pub struct ServerConnections {
     nats_client: NatsClient,
     scylla_session: Arc<Session>,
+    pg_pool: Arc<PgPool>,
 }
 
 impl ServerConnections {
     pub async fn new(config: &ServerConfig) -> Result<Self, Error> {
-        if PG_POOL.get().is_none() {
-            let pg_pool = PgPool::connect_with(config.postgresql.into_connect_options()).await?;
-            println!("Connected to PostreSQL");
-            PG_POOL.set(pg_pool).expect("PG_POOL already initialized");
-        }
+        let pg_pool = PgPool::connect_with(config.postgresql.into_connect_options()).await?;
+        println!("Connected to PostreSQL");
 
         let scylla_session = config.scylladb.into_session_builder().build().await?;
         println!("Connected to ScyllaDB");
@@ -32,6 +30,7 @@ impl ServerConnections {
         Ok(Self {
             nats_client,
             scylla_session: Arc::new(scylla_session),
+            pg_pool: Arc::new(pg_pool),
         })
     }
 
@@ -39,8 +38,8 @@ impl ServerConnections {
         self.scylla_session.as_ref()
     }
 
-    pub fn get_pg(&self) -> &'static PgPool {
-        PG_POOL.get().unwrap()
+    pub fn get_pg(&self) -> &PgPool {
+        self.pg_pool.as_ref()
     }
 
     pub fn get_nats(&self) -> NatsClient {
