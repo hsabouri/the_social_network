@@ -17,7 +17,7 @@ use crate::{
 };
 
 async fn inner_new_messages(
-    client: &Client,
+    client: Client,
 ) -> Result<impl Stream<Item = Result<Message, Error>>, Error> {
     let subscription = client.subscribe(CHANNEL_MESSAGE.into()).await?;
 
@@ -28,13 +28,13 @@ async fn inner_new_messages(
 
 /// Stream of all new messages from all users. Connected to NATS.
 pub fn new_messages<'a>(
-    client: &'a Client,
+    client: Client,
 ) -> impl Stream<Item = Result<Message, Error>> + 'a {
     inner_new_messages(client).into_stream().try_flatten()
 }
 
 async fn inner_new_friendships(
-    client: &Client,
+    client: Client,
 ) -> Result<impl Stream<Item = Result<(UserRef, UserRef), Error>>, Error> {
     let subscription = client.subscribe(CHANNEL_FRIENDSHIP.into()).await?;
 
@@ -45,13 +45,13 @@ async fn inner_new_friendships(
 
 /// Stream of all new friendships of all users. Connected to NATS.
 pub fn new_friendships<'a>(
-    client: &'a Client,
+    client: Client,
 ) -> impl Stream<Item = Result<(UserRef, UserRef), Error>> + 'a {
     inner_new_friendships(client).into_stream().try_flatten()
 }
 
 async fn inner_seen_messages(
-    client: &Client,
+    client: Client,
 ) -> Result<impl Stream<Item = Result<(UserRef, MessageRef), Error>>, Error> {
     let subscription = client.subscribe(CHANNEL_MESSAGE_SEEN.into()).await?;
 
@@ -63,13 +63,13 @@ async fn inner_seen_messages(
 
 /// Stream of all seen notification for all messages from all users. Connected to NATS.
 pub fn seen_messages<'a>(
-    client: &'a Client,
+    client: Client,
 ) -> impl Stream<Item = Result<(UserRef, MessageRef), Error>> + 'a {
     inner_seen_messages(client).into_stream().try_flatten()
 }
 
 async fn inner_unseen_messages(
-    client: &Client,
+    client: Client,
 ) -> Result<impl Stream<Item = Result<(UserRef, MessageRef), Error>>, Error> {
     let subscription = client
         .subscribe(CHANNEL_MESSAGE_UNSEEN.into()).await?;
@@ -82,7 +82,7 @@ async fn inner_unseen_messages(
 
 /// Stream of all unseen notification for all messages from all users. Connected to NATS.
 pub fn unseen_messages<'a>(
-    client: &'a Client,
+    client: Client,
 ) -> impl Stream<Item = Result<(UserRef, MessageRef), Error>> + 'a {
     inner_unseen_messages(client).into_stream().try_flatten()
 }
@@ -90,7 +90,7 @@ pub fn unseen_messages<'a>(
 /// Stream of new messges from specific users. Those users are feeded by a Stream.
 pub fn new_messages_from_users<'a, U: Userlike>(
     users: impl Stream<Item = Result<U, Error>> + 'a,
-    client: &'a Client,
+    client: Client,
 ) -> impl Stream<Item = Result<Message, Error>> + 'a {
     let new_messages = new_messages(client);
 
@@ -124,7 +124,7 @@ pub fn new_messages_from_users<'a, U: Userlike>(
 /// Stream of new friendships of a specific user.
 pub fn new_friends_of_user<'a, U: Userlike>(
     user: U,
-    client: &'a Client,
+    client: Client,
 ) -> impl Stream<Item = Result<UserRef, Error>> + 'a {
     let new_friendships = new_friendships(client);
     let user_id = user.get_uuid();

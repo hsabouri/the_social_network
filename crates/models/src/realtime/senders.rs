@@ -19,7 +19,7 @@ impl<'a> PublishMessage {
         Self { message }
     }
 
-    pub async fn publish(self, client: &Client) -> Result<(), Error> {
+    pub async fn publish(self, client: Client) -> Result<(), Error> {
         Ok(client
             .publish(CHANNEL_MESSAGE.into(), encode_proto_message(self.message))
             .await?)
@@ -39,7 +39,7 @@ impl PublishSeenMessage {
         }
     }
 
-    pub async fn publish(self, client: &Client) -> Result<(), Error> {
+    pub async fn publish(self, client: Client) -> Result<(), Error> {
         Ok(client
             .publish(
                 CHANNEL_MESSAGE_SEEN.into(),
@@ -62,7 +62,7 @@ impl PublishFriendship {
         }
     }
 
-    pub async fn publish(self, client: &Client) -> Result<(), Error> {
+    pub async fn publish(self, client: Client) -> Result<(), Error> {
         Ok(client
             .publish(
                 CHANNEL_FRIENDSHIP.into(),

@@ -7,10 +7,11 @@ use sqlx::PgPool;
 
 static PG_POOL: OnceCell<PgPool> = OnceCell::new();
 static SCYLLA_SESSION: OnceCell<Session> = OnceCell::new();
-static NATS_CLIENT: OnceCell<NatsClient> = OnceCell::new();
 
 #[derive(Clone)]
-pub struct ServerConnections;
+pub struct ServerConnections {
+    nats_client: NatsClient,
+}
 
 impl ServerConnections {
     pub async fn new(config: &ServerConfig) -> Result<Self, Error> {
@@ -28,15 +29,12 @@ impl ServerConnections {
                 .expect("SCYLLA_SESSION already initialized");
         }
 
-        if NATS_CLIENT.get().is_none() {
-            let nats_client = config.nats.into_connect_options().connect().await?;
-            println!("Connected to NATS");
-            NATS_CLIENT
-                .set(nats_client)
-                .expect("NATS_CLIENT already initialized");
-        }
+        let nats_client = config.nats.into_connect_options().connect().await?;
+        println!("Connected to NATS");
 
-        Ok(Self)
+        Ok(Self {
+            nats_client
+        })
     }
 
     pub fn get_scylla(&self) -> &'static Session {
@@ -47,7 +45,7 @@ impl ServerConnections {
         PG_POOL.get().unwrap()
     }
 
-    pub fn get_nats(&self) -> &'static NatsClient {
-        NATS_CLIENT.get().unwrap()
+    pub fn get_nats(&self) -> NatsClient {
+        self.nats_client.clone()
     }
 }

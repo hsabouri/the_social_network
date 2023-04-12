@@ -107,10 +107,10 @@ impl UserRef {
     pub fn real_time_timeline<'a>(
         self,
         pg: &'a PgPool,
-        nats: &'a Client,
+        nats: Client,
     ) -> impl Stream<Item = Result<Message, Error>> + 'a {
         let friends = self.get_friends().stream(pg);
-        let new_friends = realtime::new_friends_of_user(self, nats);
+        let new_friends = realtime::new_friends_of_user(self, nats.clone());
         let friends = friends.chain(new_friends);
 
         let stream = realtime::new_messages_from_users(friends, nats);
@@ -145,7 +145,7 @@ impl User {
     pub fn real_time_timeline<'a>(
         &'a self,
         pg: &'a PgPool,
-        nats: &'a Client,
+        nats: Client,
     ) -> impl Stream<Item = Result<Message, Error>> + 'a {
         self.downgrade().real_time_timeline(pg, nats)
     }
