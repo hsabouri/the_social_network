@@ -1,7 +1,7 @@
 use anyhow::Error;
-use chrono::{Duration, NaiveDateTime};
+use chrono::{Duration, NaiveDate, NaiveDateTime};
 use futures::{FutureExt, Stream, StreamExt};
-use scylla::frame::value::Timestamp;
+use scylla::frame::value::{Time, Timestamp};
 use scylla::Session;
 use uuid::Uuid;
 
@@ -81,6 +81,7 @@ impl InsertMessageRequest {
 pub struct GetLastMessagesOfUserRequest {
     pub user_id: Uuid,
     pub starting_from: Option<TimeBucket>,
+    pub ends_at: Option<TimeBucket>,
 }
 
 impl GetLastMessagesOfUserRequest {
@@ -88,6 +89,14 @@ impl GetLastMessagesOfUserRequest {
         Self {
             user_id,
             starting_from: None,
+            ends_at: None,
+        }
+    }
+
+    pub fn ends_from(self, time_bucket: TimeBucket) -> Self {
+        Self {
+            ends_at: Some(time_bucket),
+            ..self
         }
     }
 
@@ -103,11 +112,12 @@ impl GetLastMessagesOfUserRequest {
         session: &'a Session,
     ) -> impl Stream<Item = Result<Message, Error>> + 'a {
         let user_id = self.user_id;
-        let time_bucket_stream = self
+        let time_bucket_iter = self
             .starting_from
             .unwrap_or_else(|| TimeBucket::current())
-            .iter_past()
-            .into_stream();
+            .iter_past_to(self.ends_at.unwrap_or_default());
+
+        let time_bucket_stream = futures::stream::iter(time_bucket_iter);
 
         let bucketted_result = time_bucket_stream.map(move |bucket| {
             session.query(

@@ -1,6 +1,6 @@
+use clap::Parser;
 use proto::social_network_server::SocialNetworkServer;
 use tonic::transport::Server;
-use clap::Parser;
 
 mod api;
 mod connections;

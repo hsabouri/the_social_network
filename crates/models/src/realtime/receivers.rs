@@ -27,9 +27,7 @@ async fn inner_new_messages(
 }
 
 /// Stream of all new messages from all users. Connected to NATS.
-pub fn new_messages<'a>(
-    client: Client,
-) -> impl Stream<Item = Result<Message, Error>> + 'a {
+pub fn new_messages<'a>(client: Client) -> impl Stream<Item = Result<Message, Error>> + 'a {
     inner_new_messages(client).into_stream().try_flatten()
 }
 
@@ -71,8 +69,7 @@ pub fn seen_messages<'a>(
 async fn inner_unseen_messages(
     client: Client,
 ) -> Result<impl Stream<Item = Result<(UserRef, MessageRef), Error>>, Error> {
-    let subscription = client
-        .subscribe(CHANNEL_MESSAGE_UNSEEN.into()).await?;
+    let subscription = client.subscribe(CHANNEL_MESSAGE_UNSEEN.into()).await?;
 
     let stream =
         subscription.map(|proto_message| decode_proto_message_tag_request(proto_message.payload));

@@ -56,10 +56,7 @@ pub(crate) fn encode_proto_message_tag_request(
     m.encode_to_vec().into()
 }
 
-pub(crate) fn encode_proto_friendship(
-    user: UserRef,
-    friend: UserRef,
-) -> prost::bytes::Bytes {
+pub(crate) fn encode_proto_friendship(user: UserRef, friend: UserRef) -> prost::bytes::Bytes {
     let m = proto::Friendship {
         user: user.get_uuid().to_string(),
         friend: friend.get_uuid().to_string(),

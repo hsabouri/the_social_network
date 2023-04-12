@@ -182,7 +182,6 @@ impl SocialNetwork for ServerState {
             while let Some(item) = stream.next().await {
                 let _ = tx.send(item).await;
             }
-            // Client disconnected
         });
 
         let stream = ReceiverStream::new(rx);
