@@ -65,7 +65,30 @@ impl PublishFriendship {
     pub async fn publish(self, client: Client) -> Result<(), Error> {
         Ok(client
             .publish(
-                CHANNEL_FRIENDSHIP.into(),
+                CHANNEL_NEW_FRIENDSHIP.into(),
+                encode_proto_friendship(self.user, self.friend),
+            )
+            .await?)
+    }
+}
+
+pub struct PublishRemoveFriendship {
+    pub user: UserRef,
+    pub friend: UserRef,
+}
+
+impl PublishRemoveFriendship {
+    pub fn new(user: impl Userlike, friend: impl Userlike) -> Self {
+        Self {
+            user: UserRef::new(user.get_uuid()),
+            friend: UserRef::new(friend.get_uuid()),
+        }
+    }
+
+    pub async fn publish(self, client: Client) -> Result<(), Error> {
+        Ok(client
+            .publish(
+                CHANNEL_REMOVED_FRIENDSHIP.into(),
                 encode_proto_friendship(self.user, self.friend),
             )
             .await?)

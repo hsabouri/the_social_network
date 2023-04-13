@@ -1,8 +1,11 @@
+use std::collections::HashSet;
+
 use anyhow::Error;
 use async_nats::Client;
 use async_trait::async_trait;
 use futures::{
-    stream::{select_all, StreamExt},
+    future::Either,
+    stream::{select, select_all, StreamExt, TryStreamExt},
     Stream,
 };
 use scylla::Session;
@@ -11,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     messages::Message,
-    realtime::{self, PublishFriendship},
+    realtime::{self, FriendshipUpdate, PublishFriendship, PublishRemoveFriendship},
     repository::{
         messages::{GetLastMessagesOfUserRequest, InsertMessageRequest},
         users::*,
@@ -55,6 +58,10 @@ pub trait Userlike: Sized {
         PublishFriendship::new(self, other)
     }
 
+    fn realtime_remove_friend(self, other: impl Userlike) -> PublishRemoveFriendship {
+        PublishRemoveFriendship::new(self, other)
+    }
+
     fn downgrade(&self) -> UserRef {
         UserRef::new(self.get_uuid())
     }
@@ -68,7 +75,7 @@ impl Userlike for Uuid {
 
 /// Stores only the Uuid of the user.
 /// Provides methods to easily get the full user infos at the expense of a request to DB.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct UserRef(pub Uuid);
 
 impl Userlike for UserRef {
@@ -113,11 +120,53 @@ impl UserRef {
         pg: &'a PgPool,
         nats: Client,
     ) -> impl Stream<Item = Result<Message, Error>> + 'a {
-        let friends = self.get_friends().stream(pg);
-        let new_friends = realtime::new_friends_of_user(self, nats.clone());
-        let friends = friends.chain(new_friends);
+        enum FriendUpdate {
+            New(UserRef),
+            Removed(UserRef),
+        }
 
-        let stream = realtime::new_messages_from_users(friends, nats);
+        let initial_friends = self
+            .get_friends()
+            .stream(pg)
+            .map_ok(|f| FriendUpdate::New(f));
+
+        let updates = realtime::friendships_updates(nats.clone()).map_ok(|f| match f {
+            FriendshipUpdate::New(_, f) => FriendUpdate::New(f),
+            FriendshipUpdate::Removed(_, f) => FriendUpdate::Removed(f),
+        });
+
+        let friends = initial_friends.chain(updates);
+        let messages = realtime::new_messages(nats.clone());
+
+        let stream = select(friends.map(Either::Left), messages.map(Either::Right));
+
+        let stream = stream
+            .scan(HashSet::<UserRef>::new(), |user_list, either| {
+                let res = Some(match either {
+                    Either::Left(Ok(friend)) => {
+                        match friend {
+                            FriendUpdate::New(friend) => {
+                                user_list.insert(friend);
+                            }
+                            FriendUpdate::Removed(friend) => {
+                                user_list.remove(&friend);
+                            }
+                        }
+                        None
+                    }
+                    Either::Right(Ok(message))
+                        if user_list.contains(&UserRef::new(message.user_id)) =>
+                    {
+                        Some(Ok(message))
+                    }
+                    Either::Right(Ok(_)) => None,
+                    Either::Left(Err(e)) => Some(Err(e)),
+                    Either::Right(Err(e)) => Some(Err(e)),
+                });
+
+                async { res } // https://users.rust-lang.org/t/lifetime-confusing-on-futures-scan/42204
+            })
+            .filter_map(|e| async { e });
 
         stream
     }

@@ -102,10 +102,17 @@ impl SocialNetwork for ServerState {
 
         self.task_manager
             .spawn_await_result(async move {
-                user.remove_friend(friend)
+                let realtime = user
+                    .realtime_remove_friend(friend)
+                    .publish(connections.get_nats());
+
+                let persistence = user
+                    .remove_friend(friend)
                     .execute(connections.get_pg())
-                    .map_err(|e| Status::internal(e.to_string()))
-                    .await
+                    .map_err(|e| Status::internal(e.to_string()));
+
+                let (_rt, persistance) = futures::join!(realtime, persistence);
+                persistance
             })
             .await?;
 
@@ -194,10 +201,8 @@ impl SocialNetwork for ServerState {
         request: Request<MessageTagRequest>,
     ) -> Result<Response<MessageStatusResponse>, Status> {
         let request = request.into_inner();
-
         let user =
             UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
-
         let message = MessageRef(
             MessageId::from_str(request.message_id.as_str())
                 .map_err(Status::error_invalid_argument)?,
@@ -223,10 +228,8 @@ impl SocialNetwork for ServerState {
         request: Request<MessageTagRequest>,
     ) -> Result<Response<MessageStatusResponse>, Status> {
         let request = request.into_inner();
-
         let user =
             UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
-
         let message = MessageRef(
             MessageId::from_str(request.message_id.as_str())
                 .map_err(Status::error_invalid_argument)?,

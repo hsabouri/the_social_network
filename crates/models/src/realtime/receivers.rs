@@ -34,7 +34,7 @@ pub fn new_messages<'a>(client: Client) -> impl Stream<Item = Result<Message, Er
 async fn inner_new_friendships(
     client: Client,
 ) -> Result<impl Stream<Item = Result<(UserRef, UserRef), Error>>, Error> {
-    let subscription = client.subscribe(CHANNEL_FRIENDSHIP.into()).await?;
+    let subscription = client.subscribe(CHANNEL_NEW_FRIENDSHIP.into()).await?;
 
     let stream = subscription.map(|proto_message| decode_proto_friendship(proto_message.payload));
 
@@ -46,6 +46,25 @@ pub fn new_friendships<'a>(
     client: Client,
 ) -> impl Stream<Item = Result<(UserRef, UserRef), Error>> + 'a {
     inner_new_friendships(client).into_stream().try_flatten()
+}
+
+async fn inner_removed_friendships(
+    client: Client,
+) -> Result<impl Stream<Item = Result<(UserRef, UserRef), Error>>, Error> {
+    let subscription = client.subscribe(CHANNEL_REMOVED_FRIENDSHIP.into()).await?;
+
+    let stream = subscription.map(|proto_message| decode_proto_friendship(proto_message.payload));
+
+    Ok(stream)
+}
+
+/// Stream of all new friendships of all users. Connected to NATS.
+pub fn removed_friendships<'a>(
+    client: Client,
+) -> impl Stream<Item = Result<(UserRef, UserRef), Error>> + 'a {
+    inner_removed_friendships(client)
+        .into_stream()
+        .try_flatten()
 }
 
 async fn inner_seen_messages(
@@ -135,6 +154,47 @@ pub fn new_friends_of_user<'a, U: Userlike>(
 
         async { res }
     });
+
+    stream
+}
+
+/// Stream of removed friendships of a specific user.
+pub fn removed_friends_of_user<'a, U: Userlike>(
+    user: U,
+    client: Client,
+) -> impl Stream<Item = Result<UserRef, Error>> + 'a {
+    let removed_friendships = removed_friendships(client);
+    let user_id = user.get_uuid();
+
+    let stream = removed_friendships.filter_map(move |friendship| {
+        let res = match friendship {
+            Ok((user, friend)) if user.get_uuid() == user_id => Some(Ok(friend)),
+            Err(e) => Some(Err(e)),
+            _other => None,
+        };
+
+        async { res }
+    });
+
+    stream
+}
+
+pub enum FriendshipUpdate {
+    New(UserRef, UserRef),
+    Removed(UserRef, UserRef),
+}
+
+/// Stream of removed friendships of a specific user.
+pub fn friendships_updates<'a>(
+    client: Client,
+) -> impl Stream<Item = Result<FriendshipUpdate, Error>> + 'a {
+    let new_friendships = new_friendships(client.clone());
+    let removed_friendships = removed_friendships(client);
+
+    let stream = select(
+        new_friendships.map_ok(|(a, b)| FriendshipUpdate::New(a, b)),
+        removed_friendships.map_ok(|(a, b)| FriendshipUpdate::Removed(a, b)),
+    );
 
     stream
 }
