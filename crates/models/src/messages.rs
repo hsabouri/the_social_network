@@ -1,13 +1,13 @@
 use std::{fmt::Display, str::FromStr};
 
-use anyhow::Error;
 use chrono::{NaiveDateTime, Utc};
+use thiserror::Error;
 use uuid::Uuid;
 
-use crate::users::{UserId, Userlike};
+use crate::users::{UserId, UserIdParsingError, Userlike};
 
 /// UUID and timestamp (milli-seconds precision).
-/// Displayed it looks like this :
+/// Displayed it looks like this (53 bytes):
 /// 11234567-1234-5678-1234-567812345678x0000000064371AB8
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct MessageId {
@@ -15,20 +15,43 @@ pub struct MessageId {
     timestamp: u64,
 }
 
+#[derive(Error, Debug)]
+pub enum MessageIdParsingError {
+    #[error("wrong size of str `{0}`, expected `53` bytes long str")]
+    Size(usize),
+    #[error("wrong format of str, got `{0}`, expected `x` at byte 36")]
+    Format(char),
+    #[error("wrong encoding of str")]
+    Utf8Error(#[from] std::str::Utf8Error),
+    #[error("wrong format or value for timestamp")]
+    Timestamp(#[from] std::num::ParseIntError),
+    #[error("error parsing user id")]
+    UserId(#[from] UserIdParsingError),
+}
+
 impl FromStr for MessageId {
-    type Err = Error;
+    type Err = MessageIdParsingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let bytes = s.as_bytes();
+        let size = bytes.len();
 
-        if bytes.len() == 36 + 1 + 16 && s.is_ascii() && bytes[36] == 'x' as u8 {
-            let user_id = UserId::from_str(std::str::from_utf8(&bytes[0..36])?)?;
-            let timestamp = u64::from_str_radix(std::str::from_utf8(&bytes[37..63])?, 16)?;
-
-            Ok(Self { user_id, timestamp })
-        } else {
-            Err(Error::msg("Message ID size is incorrect or is not ASCII"))
+        if size != 36 + 1 + 16 {
+            return Err(MessageIdParsingError::Size(size));
         }
+
+        let sep = bytes[36] as char;
+        if sep != 'x' {
+            return Err(MessageIdParsingError::Format(sep));
+        }
+
+        // Actually safe because is comes from a str.
+        let user_id_str = std::str::from_utf8(&bytes[0..36])?;
+        let timestamp_str = std::str::from_utf8(&bytes[37..63])?;
+        let user_id = UserId::from_str(user_id_str)?;
+        let timestamp = u64::from_str_radix(timestamp_str, 16)?;
+
+        Ok(Self { user_id, timestamp })
     }
 }
 
@@ -39,7 +62,7 @@ impl Display for MessageId {
 }
 
 impl MessageId {
-    pub fn try_parse(s: impl AsRef<str>) -> Result<Self, Error> {
+    pub fn try_parse(s: impl AsRef<str>) -> Result<Self, MessageIdParsingError> {
         s.as_ref().parse()
     }
 
@@ -98,33 +121,6 @@ impl Message {
             user_id: user.get_id(),
             date: chrono::offset::Local::now().naive_local(),
             content,
-        }
-    }
-}
-
-#[cfg(feature = "proto")]
-impl TryFrom<proto::Message> for Message {
-    type Error = anyhow::Error;
-
-    fn try_from(value: proto::Message) -> Result<Self, Self::Error> {
-        Ok(Message {
-            id: MessageId::try_parse(value.message_id.as_str())?,
-            user_id: UserId::try_parse(value.user_id.as_str())?,
-            date: NaiveDateTime::from_timestamp_opt(value.timestamp as i64, 0).unwrap(),
-            content: value.content,
-        })
-    }
-}
-
-#[cfg(feature = "proto")]
-impl Into<proto::Message> for Message {
-    fn into(self) -> proto::Message {
-        proto::Message {
-            message_id: self.id.to_string(),
-            user_id: self.user_id.to_string(),
-            timestamp: self.date.timestamp() as u64,
-            content: self.content.clone(),
-            read: false,
         }
     }
 }

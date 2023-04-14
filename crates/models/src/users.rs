@@ -1,10 +1,15 @@
 use std::{fmt::Display, str::FromStr};
 
-use anyhow::Error;
+use thiserror::Error;
+
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct UserId(Uuid);
+
+#[derive(Error, Debug)]
+#[error(transparent)]
+pub struct UserIdParsingError(#[from] uuid::Error);
 
 impl Display for UserId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -13,7 +18,7 @@ impl Display for UserId {
 }
 
 impl FromStr for UserId {
-    type Err = Error;
+    type Err = UserIdParsingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(Uuid::from_str(s)?))
@@ -33,7 +38,7 @@ impl Into<Uuid> for UserId {
 }
 
 impl UserId {
-    pub fn try_parse(s: impl AsRef<str>) -> Result<Self, Error> {
+    pub fn try_parse(s: impl AsRef<str>) -> Result<Self, UserIdParsingError> {
         s.as_ref().parse()
     }
 }
