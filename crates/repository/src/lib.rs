@@ -6,6 +6,10 @@ use scylla::frame::value::Timestamp;
 pub mod messages;
 pub mod users;
 
+// Re-exports
+pub use scylla::Session;
+pub use sqlx::PgPool;
+
 /// A bucket is used to group rows in ScyllaDB. We group them by week starting on monday 00:00.
 /// This is not generic yet.
 #[derive(Clone, Copy, Debug)]

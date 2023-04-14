@@ -1,12 +1,10 @@
-use anyhow::Error;
-use uuid::Uuid;
+use std::str::FromStr;
 
+use anyhow::Error;
 use prost::Message as ProstMessage;
 
-use crate::{
-    messages::{Message, MessageId, MessageRef, Messagelike},
-    users::{UserRef, Userlike},
-};
+use models::users::*;
+use models::messages::*;
 
 pub(crate) fn decode_proto_message(payload: prost::bytes::Bytes) -> Result<Message, Error> {
     let m = proto::Message::decode(payload)?;
@@ -18,22 +16,22 @@ pub(crate) fn decode_proto_message(payload: prost::bytes::Bytes) -> Result<Messa
 
 pub(crate) fn decode_proto_friendship(
     payload: prost::bytes::Bytes,
-) -> Result<(UserRef, UserRef), Error> {
+) -> Result<(UserId, UserId), Error> {
     let friendship = proto::Friendship::decode(payload)?;
 
-    let user = UserRef(Uuid::try_parse(friendship.user.as_str())?);
-    let friend = UserRef(Uuid::try_parse(friendship.friend.as_str())?);
+    let user = UserId::from_str(friendship.user.as_str())?;
+    let friend = UserId::from_str(friendship.friend.as_str())?;
 
     Ok((user, friend))
 }
 
 pub(crate) fn decode_proto_message_tag_request(
     payload: prost::bytes::Bytes,
-) -> Result<(UserRef, MessageRef), Error> {
+) -> Result<(UserId, MessageId), Error> {
     let tag = proto::MessageTagRequest::decode(payload)?;
 
-    let user = UserRef(Uuid::try_parse(tag.user_id.as_str())?);
-    let message = MessageRef(MessageId::try_parse(tag.message_id.as_str())?);
+    let user = UserId::from_str(tag.user_id.as_str())?;
+    let message = MessageId::try_parse(tag.message_id.as_str())?;
 
     Ok((user, message))
 }
@@ -45,21 +43,21 @@ pub(crate) fn encode_proto_message(message: Message) -> prost::bytes::Bytes {
 }
 
 pub(crate) fn encode_proto_message_tag_request(
-    user: UserRef,
-    message: MessageRef,
+    user: UserId,
+    message: MessageId,
 ) -> prost::bytes::Bytes {
     let m = proto::MessageTagRequest {
-        user_id: user.get_uuid().to_string(),
+        user_id: user.get_id().to_string(),
         message_id: message.get_id().to_string(),
     };
 
     m.encode_to_vec().into()
 }
 
-pub(crate) fn encode_proto_friendship(user: UserRef, friend: UserRef) -> prost::bytes::Bytes {
+pub(crate) fn encode_proto_friendship(user: UserId, friend: UserId) -> prost::bytes::Bytes {
     let m = proto::Friendship {
-        user: user.get_uuid().to_string(),
-        friend: friend.get_uuid().to_string(),
+        user: user.get_id().to_string(),
+        friend: friend.get_id().to_string(),
     };
 
     m.encode_to_vec().into()

@@ -1,11 +1,12 @@
 use anyhow::Error;
-use chrono::{Duration, NaiveDate, NaiveDateTime};
+use chrono::{Duration, NaiveDateTime};
 use futures::{FutureExt, Stream, StreamExt};
-use scylla::frame::value::{Time, Timestamp};
+use scylla::frame::value::Timestamp;
 use scylla::Session;
 use uuid::Uuid;
 
-use crate::messages::{Message, MessageId};
+use models::messages::{Message, MessageId, Messagelike};
+use models::users::{UserId, Userlike};
 
 use super::{timestamp_to_naive, TimeBucket};
 
@@ -16,7 +17,7 @@ use super::{timestamp_to_naive, TimeBucket};
 #[derive(Clone, Debug)]
 pub struct InsertMessageRequest {
     pub message_id: Option<MessageId>,
-    pub user_id: Uuid,
+    pub user_id: UserId,
     pub content: String,
     pub datetime: Option<NaiveDateTime>,
 }
@@ -32,7 +33,7 @@ impl InsertMessageRequest {
     }
 
     /// Fixes the timestamp bucket
-    pub fn new(user_id: Uuid, content: String) -> Self {
+    pub fn new(user_id: UserId, content: String) -> Self {
         Self {
             message_id: None,
             user_id,
@@ -63,11 +64,12 @@ impl InsertMessageRequest {
             .message_id
             .unwrap_or_else(|| MessageId::new_now(self.user_id));
         let (timestamp, bucket_timestamp) = Self::get_timestamps(datetime);
+        let uuid: Uuid = self.user_id.into();
 
         session
             .query("INSERT INTO messages (message_id, user_id, date_bucket, date, content) VALUES (?, ?, ?, ?, ?)", (
                 message_id.as_tuple_i64(),
-                self.user_id,
+                uuid,
                 bucket_timestamp,
                 timestamp,
                 self.content
@@ -81,15 +83,15 @@ impl InsertMessageRequest {
 /// Scrolls through time buckets and returns the messages.
 #[derive(Clone, Copy, Debug)]
 pub struct GetLastMessagesOfUserRequest {
-    pub user_id: Uuid,
+    pub user_id: UserId,
     pub starting_from: Option<TimeBucket>,
     pub ends_at: Option<TimeBucket>,
 }
 
 impl GetLastMessagesOfUserRequest {
-    pub fn new(user_id: Uuid) -> Self {
+    pub fn new(user: impl Userlike) -> Self {
         Self {
-            user_id,
+            user_id: user.get_id(),
             starting_from: None,
             ends_at: None,
         }
@@ -114,6 +116,7 @@ impl GetLastMessagesOfUserRequest {
         session: &'a Session,
     ) -> impl Stream<Item = Result<Message, Error>> + 'a {
         let user_id = self.user_id;
+        let uuid: Uuid = self.user_id.into();
         let time_bucket_iter = self
             .starting_from
             .unwrap_or_else(|| TimeBucket::current())
@@ -126,7 +129,7 @@ impl GetLastMessagesOfUserRequest {
                 r#"SELECT message_id, date, content FROM messages
                         WHERE   user_id = ?
                             AND date_bucket = ?"#,
-                (self.user_id, bucket.get_timestamp()),
+                (uuid, bucket.get_timestamp()),
             )
         });
 
@@ -164,24 +167,26 @@ impl GetLastMessagesOfUserRequest {
 
 #[derive(Clone, Copy, Debug)]
 pub struct AddSeenTagRequest {
-    pub user_id: Uuid,
+    pub user_id: UserId,
     pub message_id: MessageId,
 }
 
 impl AddSeenTagRequest {
-    pub fn new(message_id: MessageId, user_id: Uuid) -> Self {
+    pub fn new(message: impl Messagelike, user: impl Userlike) -> Self {
         Self {
-            user_id,
-            message_id,
+            user_id: user.get_id(),
+            message_id: message.get_id(),
         }
     }
 
     pub async fn execute(self, session: &Session) -> Result<(), Error> {
+        let uuid: Uuid = self.user_id.into();
+
         let _ = session
             .query(
                 r#"INSERT INTO read_tags (user_id, message_id)
                 VALUES (?, ?)"#,
-                (self.user_id, self.message_id.as_tuple_i64()),
+                (uuid, self.message_id.as_tuple_i64()),
             )
             .await?;
 
@@ -191,23 +196,25 @@ impl AddSeenTagRequest {
 
 #[derive(Clone, Copy, Debug)]
 pub struct RemoveSeenTagRequest {
-    pub user_id: Uuid,
+    pub user_id: UserId,
     pub message_id: MessageId,
 }
 
 impl RemoveSeenTagRequest {
-    pub fn new(message_id: MessageId, user_id: Uuid) -> Self {
+    pub fn new(message: impl Messagelike, user: impl Userlike) -> Self {
         Self {
-            user_id,
-            message_id,
+            user_id: user.get_id(),
+            message_id: message.get_id(),
         }
     }
 
     pub async fn execute(self, session: &Session) -> Result<(), Error> {
+        let uuid: Uuid = self.user_id.into();
+
         let _ = session
             .query(
                 r#"DELETE FROM read_tags WHERE user_id = ? AND message_id = ?"#,
-                (self.user_id, self.message_id.as_tuple_i64()),
+                (uuid, self.message_id.as_tuple_i64()),
             )
             .await?;
 

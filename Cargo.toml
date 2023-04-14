@@ -37,6 +37,7 @@ async-trait = "0.1.68"
 config = { path = "./crates/config" }
 proto = { path = "./crates/proto" }
 models = { path = "./crates/models" }
+services = { path = "./crates/services" }
 task_manager = { path = "./crates/task_manager" }
 
 [workspace]
@@ -44,5 +45,8 @@ members = [
     "crates/config",
     "crates/proto",
     "crates/models",
+    "crates/repository",
+    "crates/realtime",
+    "crates/services",
     "crates/task_manager",
 ]

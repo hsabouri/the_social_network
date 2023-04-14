@@ -6,14 +6,14 @@ use futures::future::Either;
 use futures::stream::select;
 use futures::{FutureExt, Stream};
 use futures::{StreamExt, TryStreamExt};
-use uuid::Uuid;
+use models::friendships::FriendshipUpdate;
 
 use super::channels::*;
 use super::codec::*;
 
-use crate::{
-    messages::{Message, MessageRef},
-    users::{UserRef, Userlike},
+use models::{
+    messages::{Message, MessageId},
+    users::{Userlike, UserId},
 };
 
 async fn inner_new_messages(
@@ -33,7 +33,7 @@ pub fn new_messages<'a>(client: Client) -> impl Stream<Item = Result<Message, Er
 
 async fn inner_new_friendships(
     client: Client,
-) -> Result<impl Stream<Item = Result<(UserRef, UserRef), Error>>, Error> {
+) -> Result<impl Stream<Item = Result<(UserId, UserId), Error>>, Error> {
     let subscription = client.subscribe(CHANNEL_NEW_FRIENDSHIP.into()).await?;
 
     let stream = subscription.map(|proto_message| decode_proto_friendship(proto_message.payload));
@@ -44,13 +44,13 @@ async fn inner_new_friendships(
 /// Stream of all new friendships of all users. Connected to NATS.
 pub fn new_friendships<'a>(
     client: Client,
-) -> impl Stream<Item = Result<(UserRef, UserRef), Error>> + 'a {
+) -> impl Stream<Item = Result<(UserId, UserId), Error>> + 'a {
     inner_new_friendships(client).into_stream().try_flatten()
 }
 
 async fn inner_removed_friendships(
     client: Client,
-) -> Result<impl Stream<Item = Result<(UserRef, UserRef), Error>>, Error> {
+) -> Result<impl Stream<Item = Result<(UserId, UserId), Error>>, Error> {
     let subscription = client.subscribe(CHANNEL_REMOVED_FRIENDSHIP.into()).await?;
 
     let stream = subscription.map(|proto_message| decode_proto_friendship(proto_message.payload));
@@ -61,7 +61,7 @@ async fn inner_removed_friendships(
 /// Stream of all new friendships of all users. Connected to NATS.
 pub fn removed_friendships<'a>(
     client: Client,
-) -> impl Stream<Item = Result<(UserRef, UserRef), Error>> + 'a {
+) -> impl Stream<Item = Result<(UserId, UserId), Error>> + 'a {
     inner_removed_friendships(client)
         .into_stream()
         .try_flatten()
@@ -69,7 +69,7 @@ pub fn removed_friendships<'a>(
 
 async fn inner_seen_messages(
     client: Client,
-) -> Result<impl Stream<Item = Result<(UserRef, MessageRef), Error>>, Error> {
+) -> Result<impl Stream<Item = Result<(UserId, MessageId), Error>>, Error> {
     let subscription = client.subscribe(CHANNEL_MESSAGE_SEEN.into()).await?;
 
     let stream =
@@ -81,13 +81,13 @@ async fn inner_seen_messages(
 /// Stream of all seen notification for all messages from all users. Connected to NATS.
 pub fn seen_messages<'a>(
     client: Client,
-) -> impl Stream<Item = Result<(UserRef, MessageRef), Error>> + 'a {
+) -> impl Stream<Item = Result<(UserId, MessageId), Error>> + 'a {
     inner_seen_messages(client).into_stream().try_flatten()
 }
 
 async fn inner_unseen_messages(
     client: Client,
-) -> Result<impl Stream<Item = Result<(UserRef, MessageRef), Error>>, Error> {
+) -> Result<impl Stream<Item = Result<(UserId, MessageId), Error>>, Error> {
     let subscription = client.subscribe(CHANNEL_MESSAGE_UNSEEN.into()).await?;
 
     let stream =
@@ -99,7 +99,7 @@ async fn inner_unseen_messages(
 /// Stream of all unseen notification for all messages from all users. Connected to NATS.
 pub fn unseen_messages<'a>(
     client: Client,
-) -> impl Stream<Item = Result<(UserRef, MessageRef), Error>> + 'a {
+) -> impl Stream<Item = Result<(UserId, MessageId), Error>> + 'a {
     inner_unseen_messages(client).into_stream().try_flatten()
 }
 
@@ -111,12 +111,12 @@ pub fn new_messages_from_users<'a, U: Userlike>(
     let new_messages = new_messages(client);
 
     let left_right = select(
-        users.map_ok(|u| u.get_uuid()).map(Either::Left),
+        users.map_ok(|u| u.get_id()).map(Either::Left),
         new_messages.map(Either::Right),
     );
 
     let stream = left_right
-        .scan(HashSet::<Uuid>::new(), |user_list, either| {
+        .scan(HashSet::<UserId>::new(), |user_list, either| {
             let res = Some(match either {
                 Either::Left(Ok(user)) => {
                     user_list.insert(user);
@@ -141,13 +141,13 @@ pub fn new_messages_from_users<'a, U: Userlike>(
 pub fn new_friends_of_user<'a, U: Userlike>(
     user: U,
     client: Client,
-) -> impl Stream<Item = Result<UserRef, Error>> + 'a {
+) -> impl Stream<Item = Result<UserId, Error>> + 'a {
     let new_friendships = new_friendships(client);
-    let user_id = user.get_uuid();
+    let user_id = user.get_id();
 
     let stream = new_friendships.filter_map(move |friendship| {
         let res = match friendship {
-            Ok((user, friend)) if user.get_uuid() == user_id => Some(Ok(friend)),
+            Ok((user, friend)) if user.get_id() == user_id => Some(Ok(friend)),
             Err(e) => Some(Err(e)),
             _other => None,
         };
@@ -162,13 +162,13 @@ pub fn new_friends_of_user<'a, U: Userlike>(
 pub fn removed_friends_of_user<'a, U: Userlike>(
     user: U,
     client: Client,
-) -> impl Stream<Item = Result<UserRef, Error>> + 'a {
+) -> impl Stream<Item = Result<UserId, Error>> + 'a {
     let removed_friendships = removed_friendships(client);
-    let user_id = user.get_uuid();
+    let user_id = user.get_id();
 
     let stream = removed_friendships.filter_map(move |friendship| {
         let res = match friendship {
-            Ok((user, friend)) if user.get_uuid() == user_id => Some(Ok(friend)),
+            Ok((user, friend)) if user.get_id() == user_id => Some(Ok(friend)),
             Err(e) => Some(Err(e)),
             _other => None,
         };
@@ -177,11 +177,6 @@ pub fn removed_friends_of_user<'a, U: Userlike>(
     });
 
     stream
-}
-
-pub enum FriendshipUpdate {
-    New(UserRef, UserRef),
-    Removed(UserRef, UserRef),
 }
 
 /// Stream of removed friendships of a specific user.

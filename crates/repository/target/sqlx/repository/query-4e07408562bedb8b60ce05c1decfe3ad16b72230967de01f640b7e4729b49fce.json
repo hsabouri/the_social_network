@@ -1,0 +1,21 @@
+{
+  "query": "\n                SELECT friend_id FROM friendships WHERE user_id = $1 OR friend_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "friend_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4c11c73bd7d399304f5c706d7b9c7d589d127f1b100d8af1f180765661a15d26"
+}

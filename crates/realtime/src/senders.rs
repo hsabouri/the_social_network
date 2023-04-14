@@ -4,10 +4,9 @@ use async_nats::Client;
 use super::channels::*;
 use super::codec::*;
 
-use crate::messages::Messagelike;
-use crate::{
-    messages::{Message, MessageRef},
-    users::{UserRef, Userlike},
+use models::{
+    messages::{Message, MessageId, Messagelike},
+    users::{UserId, Userlike},
 };
 
 pub struct PublishMessage {
@@ -27,15 +26,15 @@ impl<'a> PublishMessage {
 }
 
 pub struct PublishSeenMessage {
-    pub user: UserRef,
-    pub message: MessageRef,
+    pub user: UserId,
+    pub message: MessageId,
 }
 
 impl PublishSeenMessage {
     pub fn new(message: impl Messagelike, user: impl Userlike) -> Self {
         Self {
-            user: user.downgrade(),
-            message: MessageRef::new(message.get_id()),
+            user: user.get_id(),
+            message: message.get_id(),
         }
     }
 
@@ -50,15 +49,15 @@ impl PublishSeenMessage {
 }
 
 pub struct PublishFriendship {
-    pub user: UserRef,
-    pub friend: UserRef,
+    pub user: UserId,
+    pub friend: UserId,
 }
 
 impl PublishFriendship {
     pub fn new(user: impl Userlike, friend: impl Userlike) -> Self {
         Self {
-            user: UserRef::new(user.get_uuid()),
-            friend: UserRef::new(friend.get_uuid()),
+            user: user.get_id(),
+            friend: friend.get_id(),
         }
     }
 
@@ -73,15 +72,15 @@ impl PublishFriendship {
 }
 
 pub struct PublishRemoveFriendship {
-    pub user: UserRef,
-    pub friend: UserRef,
+    pub user: UserId,
+    pub friend: UserId,
 }
 
 impl PublishRemoveFriendship {
     pub fn new(user: impl Userlike, friend: impl Userlike) -> Self {
         Self {
-            user: UserRef::new(user.get_uuid()),
-            friend: UserRef::new(friend.get_uuid()),
+            user: user.get_id(),
+            friend: friend.get_id(),
         }
     }
 

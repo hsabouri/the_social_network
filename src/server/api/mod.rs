@@ -7,10 +7,12 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
 
 use config::ServerConfig;
-use models::messages::{Message, MessageId, MessageRef, Messagelike};
-use models::users::{User, UserRef, Userlike};
+use models::messages::{Message, MessageId, Messagelike};
+use models::users::{User, UserId, Userlike};
 use proto::social_network_server::SocialNetwork;
 use proto::*;
+use services::messages::{MessageServices, MessagelikeServices};
+use services::users::{UserIdServices, UserServices, UserlikeServices};
 use task_manager::TaskManager;
 
 use crate::connections::ServerConnections;
@@ -44,7 +46,7 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<UserResponse>, Status> {
         let request = request.into_inner();
 
-        let user = User::get_by_name(request.name)
+        let user = UserServices::get_by_name(request.name)
             .execute(self.connections.get_pg())
             .await
             .map_err(Status::error_internal)?;
@@ -62,9 +64,9 @@ impl SocialNetwork for ServerState {
         let request = request.into_inner();
 
         let user =
-            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
+            UserId::from_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
         let friend =
-            UserRef::from_str_uuid(request.friend_id).map_err(Status::error_invalid_argument)?;
+            UserId::from_str(request.friend_id.as_str()).map_err(Status::error_invalid_argument)?;
 
         let connections = self.connections.clone();
 
@@ -94,9 +96,9 @@ impl SocialNetwork for ServerState {
         let request = request.into_inner();
 
         let user =
-            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
+            UserId::from_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
         let friend =
-            UserRef::from_str_uuid(request.friend_id).map_err(Status::error_invalid_argument)?;
+            UserId::from_str(request.friend_id.as_str()).map_err(Status::error_invalid_argument)?;
 
         let connections = self.connections.clone();
 
@@ -137,7 +139,7 @@ impl SocialNetwork for ServerState {
         );
 
         let user =
-            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
+            UserId::from_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
 
         let message = Message::new(user, request.content);
 
@@ -145,12 +147,13 @@ impl SocialNetwork for ServerState {
 
         self.task_manager
             .spawn_await_return(async move {
-                let realtime = message
+                let services = MessageServices::new(message);
+                let realtime = services
                     .clone()
                     .realtime_publish()
                     .publish(connections.get_nats());
 
-                let persistence = message
+                let persistence = services
                     .insert()
                     .execute(connections.get_scylla())
                     .map_err(Status::error_internal);
@@ -171,15 +174,15 @@ impl SocialNetwork for ServerState {
         &self,
         request: Request<TimelineRequest>,
     ) -> Result<Response<Self::TimelineStream>, Status> {
-        let timeline_request = request.into_inner();
-        let user = UserRef::from_str_uuid(timeline_request.user_id)
-            .map_err(Status::error_invalid_argument)?;
+        let request = request.into_inner();
+        let user =
+            UserId::from_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
 
         let connections = self.connections.clone();
 
         let (tx, rx) = mpsc::channel(128);
         tokio::spawn(async move {
-            let mut stream = user
+            let mut stream = UserIdServices::new(user)
                 .get_timeline(connections.get_pg(), connections.get_scylla())
                 .await
                 .map_ok(|message| TimelineResponse {
@@ -202,11 +205,10 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<MessageStatusResponse>, Status> {
         let request = request.into_inner();
         let user =
-            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
-        let message = MessageRef(
-            MessageId::from_str(request.message_id.as_str())
-                .map_err(Status::error_invalid_argument)?,
-        );
+            UserId::from_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
+
+        let message = MessageId::from_str(request.message_id.as_str())
+            .map_err(Status::error_invalid_argument)?;
 
         let connections = self.connections.clone();
 
@@ -229,11 +231,9 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<MessageStatusResponse>, Status> {
         let request = request.into_inner();
         let user =
-            UserRef::from_str_uuid(request.user_id).map_err(Status::error_invalid_argument)?;
-        let message = MessageRef(
-            MessageId::from_str(request.message_id.as_str())
-                .map_err(Status::error_invalid_argument)?,
-        );
+            UserId::from_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
+        let message = MessageId::from_str(request.message_id.as_str())
+            .map_err(Status::error_invalid_argument)?;
 
         let connections = self.connections.clone();
 
@@ -259,13 +259,13 @@ impl SocialNetwork for ServerState {
     ) -> Result<Response<Self::RealTimeNotificationsStream>, Status> {
         let request = request.into_inner();
         let user =
-            UserRef::from_str_uuid(&request.user_id).map_err(Status::error_invalid_argument)?;
+            UserId::from_str(request.user_id.as_str()).map_err(Status::error_invalid_argument)?;
 
         let connections = self.connections.clone();
 
         let (tx, rx) = mpsc::channel(128);
         tokio::spawn(async move {
-            let stream = user
+            let stream = UserIdServices::new(user)
                 .real_time_timeline(connections.get_pg(), connections.get_nats())
                 .map_err(Status::error_internal)
                 .map_ok(|message| NotificationsResponse {

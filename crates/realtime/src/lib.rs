@@ -5,8 +5,7 @@ mod codec;
 pub mod receivers;
 pub mod senders;
 
-pub use receivers::*;
-pub use senders::*;
+pub use async_nats::Client;
 
 #[cfg(test)]
 #[tokio::test]
