@@ -69,7 +69,7 @@ impl SocialNetwork for ServerState {
         let connections = self.connections.clone();
 
         self.task_manager
-            .spawn_await_result(async move {
+            .spawn_await_return(async move {
                 let realtime = user
                     .realtime_friend_with(friend)
                     .publish(connections.get_nats());
@@ -101,7 +101,7 @@ impl SocialNetwork for ServerState {
         let connections = self.connections.clone();
 
         self.task_manager
-            .spawn_await_result(async move {
+            .spawn_await_return(async move {
                 let realtime = user
                     .realtime_remove_friend(friend)
                     .publish(connections.get_nats());
@@ -144,7 +144,7 @@ impl SocialNetwork for ServerState {
         let connections = self.connections.clone();
 
         self.task_manager
-            .spawn_await_result(async move {
+            .spawn_await_return(async move {
                 let realtime = message
                     .clone()
                     .realtime_publish()
@@ -211,7 +211,7 @@ impl SocialNetwork for ServerState {
         let connections = self.connections.clone();
 
         self.task_manager
-            .spawn_await_result(async move {
+            .spawn_await_return(async move {
                 message
                     .seen_by(user)
                     .execute(connections.get_scylla())
@@ -238,7 +238,7 @@ impl SocialNetwork for ServerState {
         let connections = self.connections.clone();
 
         self.task_manager
-            .spawn_await_result(async move {
+            .spawn_await_return(async move {
                 message
                     .unseen_by(user)
                     .execute(connections.get_scylla())
