@@ -130,10 +130,20 @@ impl UserRef {
             .stream(pg)
             .map_ok(|f| FriendUpdate::New(f));
 
-        let updates = realtime::friendships_updates(nats.clone()).map_ok(|f| match f {
-            FriendshipUpdate::New(_, f) => FriendUpdate::New(f),
-            FriendshipUpdate::Removed(_, f) => FriendUpdate::Removed(f),
-        });
+        let updates =
+            realtime::friendships_updates(nats.clone()).filter_map(move |f| async move {
+                match f {
+                    Ok(
+                        FriendshipUpdate::New(user, friend) | FriendshipUpdate::New(friend, user),
+                    ) if user == self.downgrade() => Some(Ok(FriendUpdate::New(friend))),
+                    Ok(
+                        FriendshipUpdate::Removed(user, friend)
+                        | FriendshipUpdate::Removed(friend, user),
+                    ) if user == self.downgrade() => Some(Ok(FriendUpdate::Removed(friend))),
+                    Ok(_other) => None,
+                    Err(e) => Some(Err(e)),
+                }
+            });
 
         let friends = initial_friends.chain(updates);
         let messages = realtime::new_messages(nats.clone());

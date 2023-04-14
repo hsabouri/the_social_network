@@ -110,8 +110,6 @@ impl InsertFriendshipRequest {
     }
 
     pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
-        let mut t = conn.begin().await?;
-
         sqlx::query!(
             // language=PostgreSQL
             r#"
@@ -121,22 +119,8 @@ impl InsertFriendshipRequest {
             self.user_a.get_uuid(),
             self.user_b.get_uuid(),
         )
-        .execute(&mut t)
+        .fetch_one(conn)
         .await?;
-
-        sqlx::query!(
-            // language=PostgreSQL
-            r#"
-                INSERT INTO friendships (user_id, friend_id)
-                    VALUES ($2, $1);
-            "#,
-            self.user_a.get_uuid(),
-            self.user_b.get_uuid(),
-        )
-        .execute(&mut t)
-        .await?;
-
-        t.commit().await?;
 
         Ok(())
     }
@@ -158,35 +142,20 @@ impl RemoveFriendshipRequest {
     }
 
     pub async fn execute(self, conn: &PgPool) -> Result<(), Error> {
-        let mut t = conn.begin().await?;
-
         sqlx::query!(
             // language=PostgreSQL
             r#"
                 DELETE FROM friendships
-                    WHERE user_id = $1
-                    AND friend_id = $2
+                    WHERE (user_id = $1
+                        AND friend_id = $2)
+                    OR (user_id = $2
+                        AND friend_id = $1)
             "#,
             self.user_a.get_uuid(),
             self.user_b.get_uuid(),
         )
-        .execute(&mut t)
+        .execute(conn)
         .await?;
-
-        sqlx::query!(
-            // language=PostgreSQL
-            r#"
-                DELETE FROM friendships
-                    WHERE friend_id = $1
-                    AND user_id = $2
-            "#,
-            self.user_a.get_uuid(),
-            self.user_b.get_uuid(),
-        )
-        .execute(&mut t)
-        .await?;
-
-        t.commit().await?;
 
         Ok(())
     }
@@ -208,7 +177,7 @@ impl GetFriendsOfUserRequest {
         sqlx::query!(
             // language=PostgreSQL
             r#"
-                SELECT friend_id FROM friendships WHERE user_id = $1
+                SELECT friend_id FROM friendships WHERE user_id = $1 OR friend_id = $1
             "#,
             self.user.get_uuid(),
         )
