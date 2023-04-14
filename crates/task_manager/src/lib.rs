@@ -31,7 +31,7 @@ impl TaskManager {
     }
 
     /// Use this function to "push and forget" or if you want to await for the result by yourself.
-    pub async fn spawn<F, R>(&self, task: F) -> oneshot::Receiver<R>
+    pub fn spawn<F, R>(&self, task: F) -> oneshot::Receiver<R>
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
@@ -54,7 +54,7 @@ impl TaskManager {
     }
 
     /// Use this function if you need the result of the future directly without ugly `flatten` or double await.
-    pub async fn spawn_await_result<F, R>(&self, task: F) -> R
+    pub fn spawn_await_result<F, R>(&self, task: F) -> impl Future<Output = R>
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
@@ -73,6 +73,85 @@ impl TaskManager {
             .map_err(|e| format!("{e}"))
             .expect("Can't send task");
 
-        receiver.await.unwrap()
+        async { receiver.await.unwrap() }
     }
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn simple_test() -> Result<(), anyhow::Error> {
+    use std::time::Duration;
+    use std::time::Instant;
+
+    let tm = TaskManager::new();
+
+    let start = Instant::now();
+
+    let receiver = tm.spawn(async {
+        println!("coucou");
+        Instant::now()
+    });
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let current = Instant::now();
+    let task_time = receiver.await?;
+
+    println!(
+        "{} > {} ?",
+        (current - start).as_millis(),
+        (task_time - start).as_millis()
+    );
+
+    assert!(current > task_time);
+
+    Ok(())
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn await_test() -> Result<(), anyhow::Error> {
+    use std::time::Duration;
+    use std::time::Instant;
+
+    let tm = TaskManager::new();
+
+    let start = Instant::now();
+
+    let waiter = tm.spawn_await_result(async {
+        println!("coucou");
+        Instant::now()
+    });
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let current = Instant::now();
+    let task_time = waiter.await;
+
+    println!(
+        "{} > {} ?",
+        (current - start).as_millis(),
+        (task_time - start).as_millis()
+    );
+
+    assert!(current > task_time);
+
+    Ok(())
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn sanity_check() -> Result<(), anyhow::Error> {
+    use std::time::Duration;
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    tokio::spawn(async move {
+        println!("task time: {}", (Instant::now() - start).as_millis());
+    });
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    println!("main time: {}", (Instant::now() - start).as_millis());
+
+    Ok(())
 }

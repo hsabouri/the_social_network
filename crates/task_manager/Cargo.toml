@@ -9,3 +9,7 @@ publish = ["artifactory"]
 [dependencies]
 tokio = { version = "1.0", features = ["sync", "rt"] }
 futures = "0.3.25"
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "time"] }
+anyhow = "1.0.70"
