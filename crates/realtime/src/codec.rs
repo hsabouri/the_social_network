@@ -1,12 +1,24 @@
 use std::str::FromStr;
 
-use anyhow::Error;
+use thiserror::Error;
 use prost::Message as ProstMessage;
 
 use models::users::*;
 use models::messages::*;
 
-pub(crate) fn decode_proto_message(payload: prost::bytes::Bytes) -> Result<Message, Error> {
+#[derive(Error, Debug)]
+pub enum ProtoDecodingError {
+    #[error("invalid protobuf payload")]
+    Prost(#[from] prost::DecodeError),
+    #[error("invalid Message")]
+    Message(#[from] models::proto::ProtoDecodeMessageError),
+    #[error("invalid UserId")]
+    UserId(#[from] UserIdParsingError),
+    #[error("invalid UserId")]
+    MessageId(#[from] MessageIdParsingError),
+}
+
+pub(crate) fn decode_proto_message(payload: prost::bytes::Bytes) -> Result<Message, ProtoDecodingError> {
     let m = proto::Message::decode(payload)?;
 
     let message = Message::try_from(m)?;
@@ -16,7 +28,7 @@ pub(crate) fn decode_proto_message(payload: prost::bytes::Bytes) -> Result<Messa
 
 pub(crate) fn decode_proto_friendship(
     payload: prost::bytes::Bytes,
-) -> Result<(UserId, UserId), Error> {
+) -> Result<(UserId, UserId), ProtoDecodingError> {
     let friendship = proto::Friendship::decode(payload)?;
 
     let user = UserId::from_str(friendship.user.as_str())?;
@@ -27,7 +39,7 @@ pub(crate) fn decode_proto_friendship(
 
 pub(crate) fn decode_proto_message_tag_request(
     payload: prost::bytes::Bytes,
-) -> Result<(UserId, MessageId), Error> {
+) -> Result<(UserId, MessageId), ProtoDecodingError> {
     let tag = proto::MessageTagRequest::decode(payload)?;
 
     let user = UserId::from_str(tag.user_id.as_str())?;

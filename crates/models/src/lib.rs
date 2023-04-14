@@ -1,4 +1,6 @@
 pub mod users;
 pub mod friendships;
 pub mod messages;
-mod proto;
+
+#[cfg(feature = "proto")]
+pub mod proto;

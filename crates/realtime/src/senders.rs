@@ -1,5 +1,5 @@
-use anyhow::Error;
-use async_nats::Client;
+use async_nats::{Client, PublishError};
+use thiserror::Error;
 
 use super::channels::*;
 use super::codec::*;
@@ -8,6 +8,12 @@ use models::{
     messages::{Message, MessageId, Messagelike},
     users::{UserId, Userlike},
 };
+
+#[derive(Error, Debug)]
+pub enum SenderError {
+    #[error("NATS publishing error")]
+    Nats(#[from] PublishError),
+}
 
 pub struct PublishMessage {
     pub message: Message,
@@ -18,7 +24,7 @@ impl<'a> PublishMessage {
         Self { message }
     }
 
-    pub async fn publish(self, client: Client) -> Result<(), Error> {
+    pub async fn publish(self, client: Client) -> Result<(), SenderError> {
         Ok(client
             .publish(CHANNEL_MESSAGE.into(), encode_proto_message(self.message))
             .await?)
@@ -38,7 +44,7 @@ impl PublishSeenMessage {
         }
     }
 
-    pub async fn publish(self, client: Client) -> Result<(), Error> {
+    pub async fn publish(self, client: Client) -> Result<(), SenderError> {
         Ok(client
             .publish(
                 CHANNEL_MESSAGE_SEEN.into(),
@@ -61,7 +67,7 @@ impl PublishFriendship {
         }
     }
 
-    pub async fn publish(self, client: Client) -> Result<(), Error> {
+    pub async fn publish(self, client: Client) -> Result<(), SenderError> {
         Ok(client
             .publish(
                 CHANNEL_NEW_FRIENDSHIP.into(),
@@ -84,7 +90,7 @@ impl PublishRemoveFriendship {
         }
     }
 
-    pub async fn publish(self, client: Client) -> Result<(), Error> {
+    pub async fn publish(self, client: Client) -> Result<(), SenderError> {
         Ok(client
             .publish(
                 CHANNEL_REMOVED_FRIENDSHIP.into(),

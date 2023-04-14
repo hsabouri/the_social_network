@@ -122,7 +122,7 @@ impl UserIdServices {
                     Err(e) => Some(Err(e)),
                 }
             },
-        );
+        ).map_err(|e| e.into());
 
         let friends = initial_friends.chain(updates);
         let messages = realtime::receivers::new_messages(nats.clone());
@@ -148,7 +148,7 @@ impl UserIdServices {
                     }
                     Either::Right(Ok(_)) => None,
                     Either::Left(Err(e)) => Some(Err(e)),
-                    Either::Right(Err(e)) => Some(Err(e)),
+                    Either::Right(Err(e)) => Some(Err(e.into())),
                 });
 
                 async { res } // https://users.rust-lang.org/t/lifetime-confusing-on-futures-scan/42204
